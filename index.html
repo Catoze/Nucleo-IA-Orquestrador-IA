@@ -74,22 +74,32 @@
             </div>
         </header>
 
-        <div id="log-feed" class="flex-1 p-6 overflow-y-auto space-y-4 pb-48 z-10 scroll-smooth"></div>
+        <div id="log-feed" class="flex-1 p-6 overflow-y-auto space-y-4 pb-56 z-10 scroll-smooth"></div>
 
         <div class="absolute bottom-0 w-full p-6 bg-gradient-to-t from-[#020617] via-[#020617]/95 to-transparent z-20">
-            <div class="max-w-5xl mx-auto space-y-3">
+            <div class="max-w-5xl mx-auto space-y-4">
+                
+                <!-- BARRA DE DIGITAÇÃO RESTAURADA E INTELIGENTE -->
+                <div class="flex gap-3">
+                    <input type="text" id="userInput" placeholder="Ex: Iniciar projeto... Adicionar módulo... Aprovar... Integrar MCP..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors text-slate-200 shadow-inner">
+                    <button id="btnSend" onclick="handleInput()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold text-sm transition-colors shadow-lg shadow-blue-900/20 flex items-center gap-2">
+                        Enviar <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+
+                <!-- BOTÕES DE ATALHO (Opcionais) -->
                 <div class="grid grid-cols-4 gap-3">
                     <button onclick="triggerScenario(0)" class="action-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-play text-emerald-500"></i> 1. Aprovar Escopo Inicial</span>
+                        <span class="flex items-center gap-1.5"><i class="fas fa-play text-emerald-500"></i> 1. Aprovar Escopo</span>
                     </button>
                     <button onclick="triggerScenario(1)" class="action-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-exclamation-circle text-amber-500"></i> 2. Forçar Mudança (Cen. 5)</span>
+                        <span class="flex items-center gap-1.5"><i class="fas fa-exclamation-circle text-amber-500"></i> 2. Mudar Escopo</span>
                     </button>
                     <button onclick="triggerScenario(2)" class="action-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-users-cog text-rose-500"></i> 3. Acionar MASAI (LGPD)</span>
+                        <span class="flex items-center gap-1.5"><i class="fas fa-users-cog text-rose-500"></i> 3. Acionar Agentes</span>
                     </button>
                     <button onclick="triggerScenario(3)" class="action-btn bg-blue-900 hover:bg-blue-800 border border-blue-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-white transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-plug text-blue-300"></i> 4. Integrar Ferramentas MCP</span>
+                        <span class="flex items-center gap-1.5"><i class="fas fa-plug text-blue-300"></i> 4. Integrar MCP</span>
                     </button>
                 </div>
             </div>
@@ -136,7 +146,7 @@
 
         function setProcessingState(state) {
             isProcessing = state;
-            document.querySelectorAll('.action-btn').forEach(el => el.disabled = state);
+            document.querySelectorAll('.action-btn, #btnSend, #userInput').forEach(el => el.disabled = state);
             if(state) document.getElementById('log-feed').innerHTML += `<div id="typing" class="flex gap-1 p-4 pl-11"><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div></div>`;
             else {
                 const typing = document.getElementById('typing');
@@ -189,6 +199,47 @@
             }
         }
 
+        // ==========================================
+        // LÓGICA DA BARRA DE COMANDO (INPUT)
+        // ==========================================
+        async function handleInput() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if(!text || isProcessing) return;
+            
+            input.value = '';
+            setProcessingState(true);
+            
+            const textLower = text.toLowerCase();
+
+            // 1. Comando de INICIAR / CRIAR PROJETO
+            if (textLower.includes('iniciar') || textLower.includes('escopo') || textLower.includes('projeto') || textLower.includes('criar')) {
+                await flowInitScope(text);
+            } 
+            // 2. Comando de MUDAR ESCOPO (Cenário 5)
+            else if (textLower.includes('mudança') || textLower.includes('mudar') || textLower.includes('2fa') || textLower.includes('adicionar')) {
+                await flowGovernanceBlock(text);
+            } 
+            // 3. Comando de APROVAR AGENTES (MASAI/LGPD)
+            else if (textLower.includes('aprova') || textLower.includes('agente') || textLower.includes('contrato') || textLower.includes('sim')) {
+                await flowMasaiConflict(text);
+            } 
+            // 4. Comando de INTEGRAÇÃO (MCP)
+            else if (textLower.includes('integrar') || textLower.includes('jira') || textLower.includes('mcp') || textLower.includes('go-live')) {
+                await flowMcpIntegration(text);
+            } 
+            // 5. Comando LIVRE não catalogado
+            else {
+                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
+                await sleep(1000);
+                activateLayer(2, 'Controller');
+                await addLog('Controller', 'Camada 2 - Roteamento', 'Comando não reconhecido nas diretrizes estritas de Governança. Use termos como: "Iniciar projeto", "Solicito mudança de escopo", "Aprovar agentes" ou "Integrar ferramentas".', 'gov');
+            }
+            
+            setProcessingState(false);
+            activateLayer(0, 'Aguardando Comando...');
+        }
+
         async function triggerScenario(num) {
             if (isProcessing) return;
             setProcessingState(true);
@@ -202,13 +253,15 @@
             activateLayer(0, 'Aguardando Comando...');
         }
 
-        async function flowInitScope() {
-            await addLog('Gerente de Projetos', 'Camada 1 - View', 'Iniciando projeto de migração de sistema. Escopo, recursos e prazos validados pela diretoria.', 'user');
+        // FLUXOS (Que agora aceitam o texto livre digitado por você)
+        async function flowInitScope(customText = null) {
+            const msg = customText ? customText : 'Iniciando projeto de migração de sistema. Escopo, recursos e prazos validados pela diretoria.';
+            await addLog('Gerente de Projetos', 'Camada 1 - View', msg, 'user');
             activateLayer(4, 'View ➔ Controller ➔ Coordenação');
             await sleep(1500);
 
             activateLayer(3, 'Coordenação ➔ Governança');
-            await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', 'Escopo inicial recebido e homologado. A partir deste momento, a BASELINE ESTÁ TRAVADA. Nenhuma inteligência artificial autônoma tem permissão para alterar os requisitos.', 'gov');
+            await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', 'Escopo inicial recebido e homologado. A partir deste momento, a BASELINE ESTÁ TRAVADA. Nenhuma inteligência artificial autônoma tem permissão para alterar os requisitos do projeto.', 'gov');
             
             const baseline = document.getElementById('kpi-baseline');
             baseline.innerHTML = '<i class="fas fa-lock text-xs"></i> TRAVADA';
@@ -221,8 +274,9 @@
             await sleep(1000);
         }
 
-        async function flowGovernanceBlock() {
-            await addLog('Gerente de Projetos', 'Camada 1 - View', 'Change Request: O cliente exigiu a adição de um módulo de Autenticação 2FA urgente.', 'user');
+        async function flowGovernanceBlock(customText = null) {
+            const msg = customText ? customText : 'Change Request: O cliente exigiu a adição de um módulo de Autenticação 2FA urgente.';
+            await addLog('Gerente de Projetos', 'Camada 1 - View', msg, 'user');
             activateLayer(1, 'View ➔ Controller');
             await sleep(1500);
 
@@ -234,8 +288,9 @@
             await sleep(1000);
         }
 
-        async function flowMasaiConflict() {
-            await addLog('Gerente de Projetos', 'Camada 1 - View', 'Contrato de alteração aprovado. Acionem os agentes construtores e validadores.', 'user');
+        async function flowMasaiConflict(customText = null) {
+            const msg = customText ? customText : 'Contrato de alteração aprovado. Acionem os agentes construtores e validadores.';
+            await addLog('Gerente de Projetos', 'Camada 1 - View', msg, 'user');
             activateLayer(4, 'Governança ➔ Coordenação');
             await sleep(1000);
 
@@ -257,8 +312,9 @@
             await sleep(1000);
         }
 
-        async function flowMcpIntegration() {
-            await addLog('Patrocinador', 'Camada 1 - View', 'Dossiê validado. Aprovo o Go-Live e o encerramento do pacote.', 'user');
+        async function flowMcpIntegration(customText = null) {
+            const msg = customText ? customText : 'Dossiê validado. Aprovo o Go-Live e o encerramento do pacote.';
+            await addLog('Patrocinador', 'Camada 1 - View', msg, 'user');
             activateLayer(2, 'View ➔ Controller');
             await sleep(1000);
 
@@ -288,6 +344,9 @@
         }
 
         window.onload = () => {
+            document.getElementById('userInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') handleInput();
+            });
             setTimeout(() => {
                 addLog('Sistema', 'Camada 6 - Modelos', 'Ambiente carregado. O projeto está aberto, aguardando aprovação do escopo inicial para travar a Baseline.', 'info');
             }, 500);
