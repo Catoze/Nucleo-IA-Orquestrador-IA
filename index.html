@@ -3,431 +3,994 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SaaS | Orquestrador de Governança IA</title>
+    <title>Núcleo IA · Orquestrador de Governança Multiagente (MVC + MCP)</title>
+
+    <!-- Silencia o aviso do Play CDN ("should not be used in production").
+         O Play CDN emite esse warning incondicionalmente, sem flag de config;
+         como este é um MVP/PoC obrigatoriamente em arquivo único (sem build),
+         filtramos apenas essa mensagem específica antes do CDN carregar. -->
+    <script>
+        (function () {
+            const _warn = console.warn.bind(console);
+            console.warn = function (...args) {
+                if (typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
+                _warn(...args);
+            };
+        })();
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Tokens de design centralizados no Tailwind (cores e fontes da marca). -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        base:  '#020617',
+                        panel: '#0a1120',
+                        line:  '#1e293b',
+                        flow:  '#38bdf8',   // ciano  – fluxo do Controller
+                        ok:    '#34d399',   // emerald – validado
+                        warn:  '#fbbf24',   // amber   – atenção
+                        block: '#fb7185',   // rose    – bloqueio de governança
+                        mcp:   '#818cf8'    // indigo  – ferramentas / MCP
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"IBM Plex Mono"', 'monospace']
+                    }
+                }
+            }
+        };
+    </script>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        .glass { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.05); }
-        .layer-active {
-            background: linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, transparent 100%);
-            border-left: 4px solid #38bdf8; color: #fff; transform: scale(1.02); transition: all 0.3s ease;
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+        :root {
+            --bg: #020617;
+            --bg-soft: #0a1120;
+            --line: #1e293b;
+            --flow: #38bdf8;     /* cyan – fluxo do Controller */
+            --ok: #34d399;       /* emerald – validado */
+            --warn: #fbbf24;     /* amber – atenção */
+            --block: #fb7185;     /* rose – bloqueio de governança */
+            --mcp: #818cf8;       /* indigo – ferramentas/MCP */
         }
-        .layer-idle { border-left: 4px solid transparent; color: #94a3b8; transition: all 0.3s ease; }
-        ::-webkit-scrollbar { width: 6px; }
+
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+
+        /* Atmosfera de fundo */
+        .app-bg {
+            background:
+                radial-gradient(900px 500px at 78% -10%, rgba(56,189,248,0.10), transparent 60%),
+                radial-gradient(700px 500px at 10% 110%, rgba(129,140,248,0.08), transparent 55%),
+                var(--bg);
+        }
+        .grid-tex {
+            background-image:
+                linear-gradient(rgba(148,163,184,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148,163,184,0.04) 1px, transparent 1px);
+            background-size: 42px 42px;
+        }
+
+        /* Trilha das 7 camadas */
+        .layer { border-left: 3px solid transparent; transition: all .35s cubic-bezier(.16,1,.3,1); position: relative; }
+        .layer .dot { width: 7px; height: 7px; border-radius: 99px; background: #334155; transition: all .35s ease; flex-shrink: 0; }
+        .layer-visited { border-left-color: rgba(56,189,248,0.35); color: #cbd5e1; background: linear-gradient(90deg, rgba(56,189,248,0.05), transparent 70%); }
+        .layer-visited .dot { background: var(--flow); box-shadow: 0 0 6px var(--flow); }
+        .layer-active {
+            border-left-color: var(--flow);
+            color: #fff;
+            background: linear-gradient(90deg, rgba(56,189,248,0.18), transparent 80%);
+            box-shadow: inset 0 0 0 1px rgba(56,189,248,0.15);
+            transform: translateX(2px);
+        }
+        .layer-active .dot { background: var(--flow); box-shadow: 0 0 0 4px rgba(56,189,248,0.18), 0 0 10px var(--flow); animation: pulse-dot 1.4s infinite; }
+        .layer-gov.layer-active { border-left-color: var(--block); background: linear-gradient(90deg, rgba(251,113,133,0.20), transparent 80%); box-shadow: inset 0 0 0 1px rgba(251,113,133,0.25); }
+        .layer-gov.layer-active .dot { background: var(--block); box-shadow: 0 0 0 4px rgba(251,113,133,0.22), 0 0 12px var(--block); }
+        @keyframes pulse-dot { 0%,100% { transform: scale(1); } 50% { transform: scale(1.45); } }
+
+        .hop { font-family:'IBM Plex Mono',monospace; }
+
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        .log-enter { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes fade-in-up { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+        .log-enter { animation: fade-up .45s cubic-bezier(.16,1,.3,1) forwards; }
+        @keyframes fade-up { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform: translateY(0); } }
+
         .typing-dot { animation: typing 1.4s infinite ease-in-out both; }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        .typing-dot:nth-child(1){ animation-delay:-.32s; }
+        .typing-dot:nth-child(2){ animation-delay:-.16s; }
+        @keyframes typing { 0%,80%,100%{ transform: scale(0);} 40%{ transform: scale(1);} }
+
+        /* Pulso de alerta da Governança (reaproveitado no card in-chat) */
+        @keyframes gov-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(251,113,133,0.55); } 50% { box-shadow: 0 0 0 12px rgba(251,113,133,0); } }
+        .shake { animation: shake .5s; }
+        @keyframes shake { 10%,90%{transform:translateX(-1px)} 20%,80%{transform:translateX(2px)} 30%,50%,70%{transform:translateX(-4px)} 40%,60%{transform:translateX(4px)} }
+
+        .skill-badge { background: linear-gradient(90deg, rgba(52,211,153,0.18), rgba(56,189,248,0.18)); border:1px solid rgba(52,211,153,0.35); }
+
+        /* ---- Kanban: card arrastável + dropzone ---- */
+        .kanban-card { box-shadow: 0 4px 14px -6px rgba(0,0,0,0.6); }
+        .kanban-card.dragging { opacity: .45; transform: scale(.97) rotate(-1.5deg); }
+        .dropzone { min-height: 92px; }
+        .dropzone.drag-over {
+            border-color: rgba(251,113,133,0.95);
+            background: rgba(244,63,94,0.16);
+            box-shadow: inset 0 0 0 2px rgba(251,113,133,0.45), 0 0 28px -6px rgba(244,63,94,0.5);
+            transform: scale(1.015);
+        }
+        .dropzone.drag-over i { transform: scale(1.2); }
+        .dropzone i { transition: transform .2s ease; }
+
+        /* ---- Decisão de Governança in-chat (substitui o modal) ---- */
+        .gov-decision { border: 1px solid rgba(251,113,133,0.35); animation: gov-pulse 1.8s infinite; }
+        .gov-btn { transition: transform .15s ease, box-shadow .2s ease, background .2s ease, opacity .2s ease; }
+        .gov-btn:hover:not(:disabled) { transform: translateY(-1px); }
+        .gov-btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
+        .gov-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+        /* ---- Tooltip estilizado único (position: fixed, sem recorte) ---- */
+        #layer-tip {
+            position: fixed;
+            transform: translateY(-50%) translateX(-6px);
+            width: 236px;
+            background: rgba(15, 23, 42, 0.97);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(56,189,248,0.30);
+            border-radius: 12px;
+            padding: 10px 13px;
+            box-shadow: 0 18px 44px -12px rgba(0,0,0,0.85);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity .18s ease, transform .18s ease;
+            z-index: 80;
+        }
+        #layer-tip::before {
+            content: '';
+            position: absolute;
+            left: -6px; top: 50%;
+            transform: translateY(-50%) rotate(45deg);
+            width: 10px; height: 10px;
+            background: rgba(15, 23, 42, 0.97);
+            border-left: 1px solid rgba(56,189,248,0.30);
+            border-bottom: 1px solid rgba(56,189,248,0.30);
+        }
+        #layer-tip.show { opacity: 1; visibility: visible; transform: translateY(-50%) translateX(0); }
+        #layer-tip.is-gov, #layer-tip.is-gov::before { border-color: rgba(251,113,133,0.40); }
+        #layer-tip .tip-title { font-size: 11px; font-weight: 700; color: #e2e8f0; letter-spacing: .02em; }
+        #layer-tip .tip-desc  { font-size: 10.5px; line-height: 1.5; color: #94a3b8; margin-top: 3px; }
+
+        /* ---- Glassmorphism refinado ---- */
+        .glass {
+            background: rgba(10, 17, 32, 0.78);
+            backdrop-filter: blur(20px) saturate(140%);
+            border-color: rgba(148,163,184,0.10);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+        }
+
+        /* ---- Barra de digitação: foco com brilho ---- */
+        .input-field {
+            transition: border-color .25s ease, box-shadow .25s ease, background .25s ease;
+        }
+        .input-field:focus {
+            background: rgba(15,23,42,0.95);
+            box-shadow: 0 0 0 3px rgba(56,189,248,0.16), 0 8px 30px -10px rgba(56,189,248,0.35);
+        }
+        .send-btn { transition: transform .18s ease, box-shadow .25s ease, background .2s ease; }
+        .send-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 28px -8px rgba(56,189,248,0.55); }
+        .send-btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
+
+        /* ---- Botões de atalho: elevação + brilho de borda ---- */
+        .action-btn {
+            position: relative;
+            transition: transform .2s cubic-bezier(.16,1,.3,1), border-color .2s ease, box-shadow .25s ease, background .2s ease;
+        }
+        .action-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            border-color: rgba(56,189,248,0.45);
+            box-shadow: 0 12px 26px -12px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .action-btn:active:not(:disabled) { transform: translateY(-1px) scale(.99); }
+        .action-btn i { transition: transform .2s ease; }
+        .action-btn:hover:not(:disabled) i { transform: scale(1.18); }
+
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+        }
     </style>
 </head>
-<body class="bg-[#020617] text-slate-200 h-screen overflow-hidden flex selection:bg-blue-500/30">
+<body class="app-bg text-slate-200 h-screen overflow-hidden flex selection:bg-cyan-500/30">
 
-    <aside class="w-72 glass flex flex-col h-full z-20 shadow-2xl shadow-black">
-        <div class="p-6 border-b border-slate-800">
+    <!-- Tooltip compartilhado das camadas (position: fixed) -->
+    <div id="layer-tip"><div class="tip-title"></div><div class="tip-desc"></div></div>
+
+    <!-- ============ SIDEBAR: AS 7 CAMADAS ============ -->
+    <aside class="w-[300px] glass border-r flex flex-col h-full z-20 shadow-2xl shadow-black/60">
+        <div class="p-5 border-b border-slate-800/80">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center shadow-lg">
-                    <i class="fas fa-project-diagram text-white text-lg"></i>
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-cyan-900/40">
+                    <i class="fas fa-shield-halved text-white text-lg"></i>
                 </div>
                 <div>
-                    <h1 class="text-sm font-bold text-white tracking-wide">PMO AI Core</h1>
-                    <p class="text-[10px] text-emerald-400 font-semibold uppercase tracking-widest">Núcleo IA Framework</p>
+                    <h1 class="text-sm font-extrabold text-white tracking-tight">Núcleo IA · Orquestrador</h1>
+                    <p class="text-[10px] text-emerald-400 font-semibold uppercase tracking-[0.18em]">Centrado em Governança · MVC + MCP</p>
                 </div>
             </div>
         </div>
-        <div class="p-4 flex-1 overflow-y-auto space-y-1" id="layers-container"></div>
-        <div class="p-4 border-t border-slate-800">
-            <button onclick="downloadDossie()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 text-slate-300">
-                <i class="fas fa-file-download"></i> Baixar Dossiê (Auditoria)
+
+        <div class="px-5 pt-4 pb-2 flex items-center justify-between">
+            <span class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Arquitetura · 7 Camadas</span>
+            <span class="text-[10px] text-slate-600 mono">PMBOK 8</span>
+        </div>
+        <div class="px-3 flex-1 overflow-y-auto space-y-0.5" id="layers-container"></div>
+
+        <div class="p-4 border-t border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between text-[10px] text-slate-500 px-1">
+                <span class="uppercase tracking-wider font-bold">Eventos em trilha</span>
+                <span id="event-count" class="mono text-slate-300">0</span>
+            </div>
+            <button onclick="downloadDossie()" class="w-full py-2.5 bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 text-slate-200 border border-slate-700/60">
+                <i class="fas fa-file-shield text-cyan-400"></i> Baixar Dossiê (Auditoria)
             </button>
+            <p class="text-[9px] text-slate-600 text-center leading-relaxed px-2">Camada 1 (View) · MVP acadêmico do framework de governança multiagente.</p>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col h-full relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
-        <div class="absolute inset-0 bg-[#020617]/95 z-0"></div>
-        
-        <header class="h-20 glass border-b border-slate-800 flex items-center justify-between px-8 z-10">
-            <div class="flex flex-col">
-                <span class="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Caminho de Orquestração (Nó Ativo)</span>
-                <span id="active-route" class="font-mono text-xs text-blue-400 bg-blue-900/10 px-3 py-1.5 rounded border border-blue-900/30 flex items-center gap-2">
-                    <i class="fas fa-code-branch"></i> Aguardando Comando...
-                </span>
+    <!-- ============ MAIN ============ -->
+    <main class="flex-1 flex flex-col h-full relative grid-tex">
+        <!-- HEADER / KPIs -->
+        <header class="h-[88px] glass border-b border-slate-800/80 flex items-center justify-between px-7 z-10">
+            <div class="flex flex-col min-w-0 mr-6">
+                <span class="text-[10px] text-slate-500 uppercase font-bold tracking-[0.18em] mb-1.5">Rota de Orquestração (Controller)</span>
+                <div id="active-route" class="flex items-center gap-1.5 flex-wrap">
+                    <span class="hop text-[11px] text-slate-500 bg-slate-800/60 px-2.5 py-1 rounded-md border border-slate-700/50">aguardando comando…</span>
+                </div>
             </div>
-            <div class="flex gap-8">
+            <div class="flex gap-7 shrink-0">
                 <div class="flex flex-col items-end">
-                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Baseline</span>
-                    <span id="kpi-baseline" class="font-bold text-emerald-400 text-sm px-2.5 py-1 rounded bg-emerald-900/20 border border-emerald-500/20 flex items-center gap-1.5"><i class="fas fa-folder-open text-xs"></i> ABERTA</span>
+                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1.5">Baseline</span>
+                    <span id="kpi-baseline" class="font-bold text-sm px-2.5 py-1 rounded-md flex items-center gap-1.5"></span>
                 </div>
-                <div class="flex flex-col items-end border-l border-slate-800 pl-8">
-                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Custo Estimado</span>
-                    <span id="kpi-custo" class="font-bold text-slate-200 text-lg tabular-nums transition-colors duration-500">R$ 0,00</span>
+                <div class="flex flex-col items-end border-l border-slate-800 pl-7">
+                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1.5">Custo Estimado</span>
+                    <span id="kpi-custo" class="font-bold text-slate-100 text-lg tabular-nums transition-colors duration-500 mono">R$ 0,00</span>
                 </div>
-                <div class="flex flex-col items-end border-l border-slate-800 pl-8">
-                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Status de Risco</span>
+                <div class="flex flex-col items-end border-l border-slate-800 pl-7">
+                    <span class="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1.5">Risco</span>
                     <span id="kpi-risco" class="font-bold text-slate-400 text-lg transition-colors duration-500">N/A</span>
                 </div>
             </div>
         </header>
 
-        <div id="log-feed" class="flex-1 p-6 overflow-y-auto space-y-4 pb-56 z-10 scroll-smooth"></div>
-
-        <div class="absolute bottom-0 w-full p-6 bg-gradient-to-t from-[#020617] via-[#020617]/95 to-transparent z-20">
-            <div class="max-w-5xl mx-auto space-y-4">
-                
-                <div class="flex gap-3">
-                    <input type="text" id="userInput" placeholder="Ex: Iniciar projeto... Solicito mudança... Destravar baseline..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors text-slate-200 shadow-inner">
-                    <button id="btnSend" onclick="handleInput()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold text-sm transition-colors shadow-lg shadow-blue-900/20 flex items-center gap-2">
-                        Enviar <i class="fas fa-paper-plane"></i>
-                    </button>
+        <!-- ============ QUADRO KANBAN · BACKLOG → GOVERNANÇA ============ -->
+        <section class="z-10 px-6 pt-4">
+            <div class="max-w-[1100px] mx-auto grid grid-cols-1 md:grid-cols-2 gap-3">
+                <!-- Coluna: Backlog -->
+                <div class="glass rounded-xl border border-slate-800/80 p-3">
+                    <div class="flex items-center justify-between mb-2.5 px-1">
+                        <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2"><i class="fas fa-layer-group text-slate-500"></i> Solicitações Pendentes (Backlog)</span>
+                        <span class="text-[9px] text-slate-500 mono">arraste o card →</span>
+                    </div>
+                    <div id="card-cr042" draggable="true"
+                        class="kanban-card group cursor-grab active:cursor-grabbing select-none rounded-lg border border-amber-500/30 bg-gradient-to-br from-amber-900/20 to-slate-900/40 p-3 transition-all hover:border-amber-400/60"
+                        title="Arraste este card para a Zona de Governança (ou clique para submeter)">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-amber-300 mono">CR-042</span>
+                            <span class="text-[9px] text-amber-200/70 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Change Request</span>
+                        </div>
+                        <p class="text-[13px] font-semibold text-slate-100 mt-1.5 leading-tight">Módulo de Autenticação 2FA</p>
+                        <p class="card-status text-[10px] text-slate-400 mt-1 flex items-center gap-1.5"><i class="fas fa-grip-vertical text-slate-600 group-hover:text-amber-400 transition-colors"></i> Aguardando submissão à Governança</p>
+                    </div>
                 </div>
 
-                <div class="grid grid-cols-4 gap-3">
-                    <button onclick="triggerScenario(0)" class="action-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-play text-emerald-500"></i> 1. Atalho: Iniciar Projeto</span>
+                <!-- Coluna: Dropzone Governança -->
+                <div id="gov-dropzone"
+                    class="dropzone rounded-xl border-2 border-dashed border-rose-500/40 bg-rose-950/10 flex flex-col items-center justify-center text-center p-3 transition-all cursor-pointer">
+                    <i class="fas fa-gavel text-rose-400/80 text-xl mb-1.5"></i>
+                    <span class="text-[12px] font-bold text-rose-200 uppercase tracking-wider">Submeter à Governança</span>
+                    <span class="text-[10px] text-rose-200/60 mt-0.5">Camada 3 · Núcleo de bloqueio &amp; compliance</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- FEED -->
+        <div id="log-feed" class="flex-1 px-6 py-6 overflow-y-auto space-y-3.5 pb-60 z-10 scroll-smooth max-w-[1100px] w-full mx-auto"></div>
+
+        <!-- INPUT -->
+        <div class="absolute bottom-0 w-full p-6 bg-gradient-to-t from-[#020617] via-[#020617]/96 to-transparent z-20">
+            <div class="max-w-[1100px] mx-auto space-y-3">
+                <div class="flex gap-3">
+                    <input type="text" id="userInput" autocomplete="off"
+                        placeholder="Ex.: Quero iniciar um projeto · Solicito mudança de escopo · Aprovar formalmente · Integrar MCP"
+                        class="input-field flex-1 bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-cyan-500 text-slate-100 shadow-inner placeholder:text-slate-600">
+                    <button id="btnSend" onclick="handleInput()" class="send-btn bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-3.5 rounded-xl font-semibold text-sm shadow-lg shadow-cyan-900/30 flex items-center gap-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Enviar <i class="fas fa-paper-plane text-xs"></i>
                     </button>
-                    <button onclick="triggerScenario(1)" class="action-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-exclamation-circle text-amber-500"></i> 2. Mudar Escopo (Cen. 5)</span>
+                </div>
+                <div class="grid grid-cols-4 gap-2.5">
+                    <button onclick="triggerScenario(0)" class="action-btn bg-slate-800/70 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 text-left flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fas fa-bolt text-emerald-400"></i> 1 · Skill: Iniciar (1 pergunta)
                     </button>
-                    <button onclick="triggerScenario(2)" class="action-btn bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-users-cog text-rose-500"></i> 3. Acionar MASAI (LGPD)</span>
+                    <button onclick="triggerScenario(1)" class="action-btn bg-slate-800/70 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 text-left flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fas fa-triangle-exclamation text-amber-400"></i> 2 · Mudar escopo (Gov. bloqueia)
                     </button>
-                    <button onclick="triggerScenario(3)" class="action-btn bg-blue-900 hover:bg-blue-800 border border-blue-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-white transition-all text-left flex items-center justify-between group disabled:opacity-50">
-                        <span class="flex items-center gap-1.5"><i class="fas fa-plug text-blue-300"></i> 4. Integrar MCP (JIRA)</span>
+                    <button onclick="triggerScenario(2)" class="action-btn bg-slate-800/70 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 text-left flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fas fa-users-gear text-rose-400"></i> 3 · MASAI: Construtor vs Sensor
+                    </button>
+                    <button onclick="triggerScenario(3)" class="action-btn bg-indigo-900/60 hover:bg-indigo-800 border border-indigo-700/60 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-indigo-100 text-left flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fas fa-plug text-indigo-300"></i> 4 · Integrar MCP (JIRA/Outlook)
                     </button>
                 </div>
             </div>
         </div>
+
     </main>
 
-    <script>
-        const layers = [
-            { id: 1, name: 'View / Apresentação', icon: 'fa-desktop' },
-            { id: 2, name: 'Controller / Roteamento', icon: 'fa-route' },
-            { id: 3, name: 'Governança (Núcleo)', icon: 'fa-gavel' },
-            { id: 4, name: 'Coordenação / Ciclo', icon: 'fa-sitemap' },
-            { id: 5, name: 'Funcional (MASAI)', icon: 'fa-users-cog' },
-            { id: 6, name: 'Modelos / Memória', icon: 'fa-database' },
-            { id: 7, name: 'Ferramentas / MCP', icon: 'fa-plug' }
-        ];
+<script>
+/* =========================================================================
+   NÚCLEO IA — ORQUESTRADOR DE GOVERNANÇA MULTIAGENTE
+   Camada 1 (View) do framework MVC + MCP / PMBOK 8.
+   Estado centralizado (single source of truth) + máquina de estados.
+   ========================================================================= */
 
-        let logHistory = [];
-        let isProcessing = false;
-        
-        // Máquina de Estado da Conversa
-        let setupStep = 0;
-        let scopeObjective = "";
-        let awaitingUnlock = false;
+const LAYERS = [
+    { id: 1, name: 'Apresentação (View)',        icon: 'fa-display',    desc: 'Interface com o humano. Captura comandos e renderiza a trilha — não toma decisões de negócio.' },
+    { id: 2, name: 'Controle (Controller · MVC)', icon: 'fa-route',      desc: 'Roteia cada solicitação para a camada correta. É a porta de entrada do padrão MVC.' },
+    { id: 3, name: 'Governança (Núcleo)',         icon: 'fa-gavel', gov: true, desc: 'Núcleo de bloqueio e compliance. Trava a Baseline e impede a IA de agir como "One Shot Hero".' },
+    { id: 4, name: 'Coordenação (Orquestração)',  icon: 'fa-sitemap',    desc: 'Agentes orquestradores de fluxo e ciclos. Aqui atuam as Skills que assumem premissas gerenciais.' },
+    { id: 5, name: 'Funcional (Agentes MASAI)',   icon: 'fa-users-gear', desc: 'Agentes executores: Construtores geram artefatos e Sensores validam (ex.: bloqueio por LGPD).' },
+    { id: 6, name: 'Modelos (Estado · Memória)',  icon: 'fa-database',   desc: 'Estado e memória do projeto: TAP, baseline, premissas e KPIs persistidos durante a sessão.' },
+    { id: 7, name: 'Ferramentas (Protocolo MCP)', icon: 'fa-plug',       desc: 'Interoperabilidade via protocolo MCP. Integra sistemas externos como JIRA e Outlook.' }
+];
 
-        const layersContainer = document.getElementById('layers-container');
-        layers.forEach(l => {
-            layersContainer.innerHTML += `
-                <div id="layer-${l.id}" class="layer-idle px-4 py-3 rounded-r-lg flex items-center gap-3">
-                    <i class="fas ${l.icon} text-sm opacity-70 w-4 text-center"></i>
-                    <span class="text-xs font-semibold tracking-wide">${l.id}. ${l.name}</span>
-                </div>
-            `;
+// ---- Estado centralizado (substitui a leitura frágil do DOM) -------------
+const state = {
+    baseline: 'OPEN',          // OPEN | LOCKED | EXCEPTION | UPDATED
+    cost: 0,
+    risk: 'N/A',
+    project: '—',
+    phase: 'IDLE',             // IDLE | AWAIT_BRIEF | AWAIT_UNLOCK | CHANGE_AUTHORIZED
+    processing: false,
+    visited: new Set()
+};
+
+let auditTrail = [];   // trilha estruturada para o dossiê
+let seq = 0;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const $ = id => document.getElementById(id);
+const brl = n => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/* ---------------- Render da trilha das 7 camadas ---------------- */
+function renderLayers() {
+    $('layers-container').innerHTML = LAYERS.map(l => `
+        <div id="layer-${l.id}" class="layer ${l.gov ? 'layer-gov' : ''} flex items-center gap-3 px-4 py-2.5 rounded-r-lg text-slate-400"
+             data-tip-title="Camada ${l.id} · ${l.name}" data-tip-desc="${l.desc}" data-gov="${l.gov ? '1' : '0'}"
+             title="${l.id}. ${l.name} — ${l.desc}">
+            <span class="dot"></span>
+            <i class="fas ${l.icon} text-[13px] w-4 text-center opacity-80"></i>
+            <span class="text-[12px] font-semibold tracking-tight leading-tight">${l.id}. ${l.name}</span>
+            <i class="fas fa-check ml-auto text-[10px] text-cyan-400 layer-check opacity-0 transition-opacity"></i>
+        </div>`).join('');
+    bindLayerTooltips();
+}
+
+/* Tooltip único em position:fixed — nunca recortado pelo scroll da sidebar */
+function bindLayerTooltips() {
+    const tip = $('layer-tip');
+    document.querySelectorAll('.layer').forEach(row => {
+        row.addEventListener('mouseenter', () => {
+            tip.querySelector('.tip-title').textContent = row.dataset.tipTitle;
+            tip.querySelector('.tip-desc').textContent = row.dataset.tipDesc;
+            tip.classList.toggle('is-gov', row.dataset.gov === '1');
+            const r = row.getBoundingClientRect();
+            tip.style.top = (r.top + r.height / 2) + 'px';
+            tip.style.left = (r.right + 14) + 'px';
+            tip.classList.add('show');
         });
+        row.addEventListener('mouseleave', () => tip.classList.remove('show'));
+    });
+}
 
-        const sleep = ms => new Promise(r => setTimeout(r, ms));
+function activateLayer(id, hops) {
+    document.querySelectorAll('.layer').forEach(el => el.classList.remove('layer-active'));
+    if (id) {
+        state.visited.add(id);
+        const el = $(`layer-${id}`);
+        el.classList.add('layer-active', 'layer-visited');
+    }
+    // marca todas as visitadas e seus checks
+    state.visited.forEach(v => {
+        const el = $(`layer-${v}`);
+        if (!el.classList.contains('layer-active')) el.classList.add('layer-visited');
+        el.querySelector('.layer-check').classList.replace('opacity-0', 'opacity-100');
+    });
+    if (hops) renderRoute(hops);
+}
 
-        function activateLayer(id, routeText) {
-            document.querySelectorAll('[id^="layer-"]').forEach(el => {
-                el.classList.remove('layer-active');
-                el.classList.add('layer-idle');
-            });
-            if(id) {
-                document.getElementById(`layer-${id}`).classList.remove('layer-idle');
-                document.getElementById(`layer-${id}`).classList.add('layer-active');
-            }
-            if(routeText) document.getElementById('active-route').innerHTML = `<i class="fas fa-code-branch"></i> ${routeText}`;
-        }
+function renderRoute(hops) {
+    const colors = { default: 'text-cyan-300 border-cyan-700/50 bg-cyan-900/20', gov: 'text-rose-300 border-rose-700/50 bg-rose-900/20', mcp: 'text-indigo-300 border-indigo-700/50 bg-indigo-900/20' };
+    $('active-route').innerHTML = hops.map((h, i) => {
+        const c = colors[h.type || 'default'];
+        const arrow = i < hops.length - 1 ? '<i class="fas fa-angle-right text-slate-600 text-[10px] mx-0.5"></i>' : '';
+        return `<span class="hop text-[11px] ${c} px-2.5 py-1 rounded-md border">${h.label}</span>${arrow}`;
+    }).join('');
+}
 
-        function setProcessingState(state) {
-            isProcessing = state;
-            document.querySelectorAll('.action-btn, #btnSend, #userInput').forEach(el => el.disabled = state);
-            if(state) document.getElementById('log-feed').innerHTML += `<div id="typing" class="flex gap-1 p-4 pl-11"><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div></div>`;
-            else {
-                const typing = document.getElementById('typing');
-                if(typing) typing.remove();
-            }
-            scrollToBottom();
-        }
+/* ---------------- KPIs ---------------- */
+function updateKPIs() {
+    const b = $('kpi-baseline');
+    const map = {
+        OPEN:      ['<i class="fas fa-folder-open text-xs"></i> ABERTA',        'text-emerald-400 bg-emerald-900/20 border border-emerald-500/20'],
+        LOCKED:    ['<i class="fas fa-lock text-xs"></i> TRAVADA',              'text-rose-400 bg-rose-900/20 border border-rose-500/20'],
+        EXCEPTION: ['<i class="fas fa-unlock text-xs"></i> ABERTA (Exceção)',    'text-amber-400 bg-amber-900/20 border border-amber-500/20'],
+        UPDATED:   ['<i class="fas fa-check-double text-xs"></i> ATUALIZADA',    'text-emerald-400 bg-emerald-900/20 border border-emerald-500/20']
+    };
+    b.innerHTML = map[state.baseline][0];
+    b.className = 'font-bold text-sm px-2.5 py-1 rounded-md flex items-center gap-1.5 ' + map[state.baseline][1];
 
-        function scrollToBottom() {
-            const feed = document.getElementById('log-feed');
-            feed.scrollTop = feed.scrollHeight;
-        }
+    $('kpi-custo').innerText = brl(state.cost);
+    $('kpi-custo').className = 'font-bold text-lg tabular-nums transition-colors duration-500 mono ' +
+        (state.baseline === 'LOCKED' && state.cost > 0 ? 'text-amber-400' : 'text-slate-100');
 
-        async function addLog(sender, role, message, type = 'info') {
-            const typing = document.getElementById('typing');
-            if(typing) typing.remove();
+    const r = $('kpi-risco');
+    r.innerText = state.risk;
+    const rc = { 'N/A':'text-slate-400','Baixo':'text-emerald-400','ALTO':'text-rose-400','Mitigado':'text-emerald-400' }[state.risk] || 'text-slate-400';
+    r.className = 'font-bold text-lg transition-colors duration-500 ' + rc;
+}
 
-            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            let style = 'bg-slate-800/50 border-slate-700/50 text-slate-300';
-            let icon = 'fa-robot text-blue-400';
+/* ---------------- Feed / typing ---------------- */
+function setProcessing(s) {
+    state.processing = s;
+    document.querySelectorAll('.action-btn, #btnSend, #userInput').forEach(el => el.disabled = s);
+    const old = $('typing'); if (old) old.remove();
+    if (s) {
+        $('log-feed').insertAdjacentHTML('beforeend',
+            `<div id="typing" class="flex gap-1.5 px-4 py-3"><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-500 rounded-full typing-dot"></div></div>`);
+        scrollBottom(true);
+    }
+}
+function scrollBottom(force = false) {
+    const f = $('log-feed');
+    if (!f) return;
+    // Só "gruda" no fim se o usuário já estiver perto do fim (ou se forçado),
+    // para não atrapalhar quem rolou para cima para reler algo.
+    const nearBottom = f.scrollHeight - f.scrollTop - f.clientHeight < 160;
+    if (!force && !nearBottom) return;
+    // dois rAF garantem que imagens/ícones/altura da mensagem já foram aplicados
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        f.scrollTo({ top: f.scrollHeight, behavior: 'smooth' });
+    }));
+}
 
-            if (type === 'user') { style = 'bg-blue-900/20 border-blue-800/30 text-blue-100 ml-12'; icon = 'fa-user text-blue-400'; }
-            if (type === 'gov') { style = 'bg-amber-900/20 border-amber-500/30 text-amber-100'; icon = 'fa-gavel text-amber-500'; }
-            if (type === 'error') { style = 'bg-rose-900/20 border-rose-500/30 text-rose-100'; icon = 'fa-shield-alt text-rose-500'; }
-            if (type === 'success') { style = 'bg-emerald-900/20 border-emerald-500/30 text-emerald-100'; icon = 'fa-check-circle text-emerald-500'; }
-            if (type === 'mcp') { style = 'bg-indigo-900/20 border-indigo-500/30 text-indigo-100'; icon = 'fa-plug text-indigo-400'; }
-            if (type === 'chat') { style = 'bg-slate-700/50 border-slate-500/50 text-emerald-200'; icon = 'fa-comment-dots text-emerald-400'; }
+const STYLES = {
+    user:    ['bg-cyan-900/15 border-cyan-800/40 ml-16',      'fa-user text-cyan-400',           'Humano'],
+    info:    ['bg-slate-800/50 border-slate-700/50',          'fa-robot text-cyan-400',          'Agente'],
+    chat:    ['bg-slate-800/40 border-emerald-600/30',        'fa-comment-dots text-emerald-400','Coordenação'],
+    skill:   ['bg-emerald-900/15 border-emerald-500/30',      'fa-wand-magic-sparkles text-emerald-400','Skill'],
+    gov:     ['bg-amber-900/15 border-amber-500/30',          'fa-gavel text-amber-400',         'Governança'],
+    error:   ['bg-rose-900/20 border-rose-500/40',            'fa-shield-halved text-rose-400',  'Bloqueio'],
+    success: ['bg-emerald-900/15 border-emerald-500/30',      'fa-circle-check text-emerald-400','Validado'],
+    mcp:     ['bg-indigo-900/15 border-indigo-500/30',        'fa-plug text-indigo-400',         'MCP']
+};
 
-            const logHTML = `
-                <div class="p-4 rounded-xl border ${style} backdrop-blur-sm log-enter relative group">
-                    <div class="flex items-start justify-between mb-2">
-                        <div class="flex items-center gap-2">
-                            <i class="fas ${icon} text-lg"></i>
-                            <div>
-                                <h3 class="font-bold text-sm leading-none">${sender}</h3>
-                                <span class="text-[10px] text-slate-400 uppercase tracking-wider">${role}</span>
-                            </div>
-                        </div>
-                        <span class="text-[10px] font-mono text-slate-500 bg-black/20 px-2 py-1 rounded">${time}</span>
+async function addLog(agent, layerLabel, message, type = 'info', skillTag = null) {
+    const t = $('typing'); if (t) t.remove();
+    seq++;
+    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const [style, icon] = STYLES[type] || STYLES.info;
+
+    const badge = skillTag
+        ? `<span class="skill-badge text-[9px] font-bold text-emerald-300 px-2 py-0.5 rounded-full ml-2 uppercase tracking-wide"><i class="fas fa-bolt mr-1"></i>${skillTag}</span>`
+        : '';
+
+    $('log-feed').insertAdjacentHTML('beforeend', `
+        <div class="p-4 rounded-xl border ${style} backdrop-blur-sm log-enter">
+            <div class="flex items-start justify-between mb-1.5">
+                <div class="flex items-center gap-2.5">
+                    <i class="fas ${icon} text-lg w-5 text-center"></i>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-100 leading-none flex items-center">${agent}${badge}</h3>
+                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">${layerLabel}</span>
                     </div>
-                    <p class="text-sm leading-relaxed text-slate-300 pl-7">${message}</p>
                 </div>
-            `;
-            document.getElementById('log-feed').innerHTML += logHTML;
-            logHistory.push(`[${time}] ${sender} (${role}): ${message}`);
-            scrollToBottom();
-            
-            if(isProcessing && type !== 'user') {
-                document.getElementById('log-feed').innerHTML += `<div id="typing" class="flex gap-1 p-4 pl-11"><div class="w-2 h-2 bg-slate-600 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-600 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-600 rounded-full typing-dot"></div></div>`;
-                scrollToBottom();
-            }
+                <span class="hop text-[10px] text-slate-500 bg-black/25 px-2 py-1 rounded">${time}</span>
+            </div>
+            <p class="text-[13px] leading-relaxed text-slate-300 pl-7 whitespace-pre-line">${message}</p>
+        </div>`);
+
+    // trilha estruturada para o dossiê de auditoria
+    auditTrail.push({ seq, time, agent, layer: layerLabel, type, message });
+    $('event-count').innerText = seq;
+    scrollBottom(true);
+
+    if (state.processing && type !== 'user') {
+        $('log-feed').insertAdjacentHTML('beforeend',
+            `<div id="typing" class="flex gap-1.5 px-4 py-3"><div class="w-2 h-2 bg-slate-600 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-600 rounded-full typing-dot"></div><div class="w-2 h-2 bg-slate-600 rounded-full typing-dot"></div></div>`);
+        scrollBottom(true);
+    }
+}
+
+/* =========================================================================
+   1) LÓGICA DE "SKILLS" — o Coordenador assume premissas (1 pergunta só)
+   ========================================================================= */
+async function flowStartSkill() {
+    activateLayer(2, [{label:'View'},{label:'Controller'}]);
+    await sleep(900);
+    activateLayer(4, [{label:'Controller'},{label:'Coordenação'}]);
+    await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
+        'Skill <b>"Pré-Configuração Gerencial"</b> ativada. Em vez de um questionário exaustivo, assumo premissas a partir do contexto de PMO. Preciso de <b>uma única informação</b>:\n\n👉 Em uma frase: qual é o <b>objetivo do projeto</b> e qual a <b>faixa de orçamento</b>?',
+        'chat', 'Skill ativada');
+    state.phase = 'AWAIT_BRIEF';
+}
+
+function parseBudget(text) {
+    // tenta extrair um valor monetário do texto livre; senão, a Skill assume R$ 120.000
+    const m = text.replace(/\./g,'').match(/(\d{2,})\s*(mil|k)?/i);
+    if (m) {
+        let v = parseInt(m[1], 10);
+        if (/mil|k/i.test(m[2] || '')) v *= 1000;
+        if (v >= 1000) return v;
+    }
+    return 120000; // premissa default da Skill
+}
+
+async function flowGenerateTAP(brief) {
+    const budget = parseBudget(brief);
+    state.project = brief.length > 60 ? brief.slice(0, 57) + '…' : brief;
+
+    activateLayer(6, [{label:'Coordenação'},{label:'Modelos'}]);
+    await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
+        'A Skill <b>assumiu as premissas padrão</b> abaixo (sem te perguntar) para entregar valor imediatamente:', 'skill', 'Premissas inferidas');
+    await sleep(1200);
+    await addLog('Camada de Modelos', 'Camada 6 · Estado / Memória',
+        `• Metodologia: <b>Híbrida</b> (PMBOK 8 + ciclos ágeis)\n• Prazo estimado: <b>90 dias</b> (inferido pelo porte)\n• Equipe: <b>5 agentes funcionais</b> (3 construtores · 2 sensores)\n• Reserva de contingência: <b>10%</b>\n• Conformidade <b>LGPD</b>: ativada por padrão\n• Orçamento registrado: <b>${brl(budget)}</b>`, 'info');
+    await sleep(1600);
+
+    activateLayer(4, [{label:'Coordenação'},{label:'Governança', type:'gov'}]);
+    await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
+        'Termo de Abertura (TAP) compilado automaticamente. Encaminhando ao Núcleo de Governança para homologação da Linha de Base.', 'info');
+    await sleep(1500);
+
+    activateLayer(3, [{label:'Governança', type:'gov'}]);
+    state.cost = budget;
+    state.baseline = 'LOCKED';
+    state.risk = 'Baixo';
+    updateKPIs();
+    await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
+        '✅ TAP homologado. A partir de agora a <b>BASELINE ESTÁ TRAVADA</b>. Nenhum agente autônomo pode alterar requisitos sem aprovação humana formal — é assim que neutralizamos o comportamento "One Shot Hero".', 'gov');
+}
+
+/* =========================================================================
+   2) DIFERENCIAL — Governança intercepta mudança após baseline travada
+   ========================================================================= */
+async function flowScopeChange(text) {
+    await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+    activateLayer(2, [{label:'View'},{label:'Controller'}]);
+    await sleep(1000);
+
+    if (state.baseline !== 'LOCKED') {
+        // baseline aberta (ou exceção) → a mudança é absorvida normalmente
+        activateLayer(5, [{label:'Coordenação'},{label:'Funcional (MASAI)'}]);
+        await addLog('Agente de Escopo', 'Camada 5 · Construtor',
+            'Baseline ABERTA: aplicando a alteração de escopo solicitada e atualizando os artefatos do projeto.', 'info');
+        return;
+    }
+
+    // BASELINE TRAVADA → Camada 3 assume o controle (alerta forte)
+    activateLayer(3, [{label:'View'},{label:'Controller'},{label:'Governança', type:'gov'}]);
+    await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
+        '⛔ <b>ACESSO NEGADO.</b> A Linha de Base está TRAVADA. A IA está proibida de gerar código ou alterar o escopo de forma autônoma. É exigido um <b>Contrato de Execução</b> com aprovação humana formal antes de avaliar o impacto.', 'error');
+
+    // impacto financeiro projetado da mudança
+    state.cost = Math.round(state.cost * 1.32);
+    updateKPIs();
+    $('kpi-custo').classList.add('shake');
+    setTimeout(() => $('kpi-custo').classList.remove('shake'), 600);
+
+    await sleep(400);
+    addGovDecision(text);   // botões clicáveis dentro do próprio chat (sem modal)
+}
+
+/* Renderiza a decisão de Governança como botões in-chat (substitui o modal) */
+function addGovDecision(detail) {
+    const old = $('gov-decision'); if (old) old.remove();
+    const html = `
+        <div id="gov-decision" class="gov-decision log-enter ml-7 rounded-xl bg-rose-950/30 border p-4">
+            <p class="text-[13px] text-rose-100/90 leading-relaxed mb-3">
+                <i class="fas fa-user-shield text-rose-300 mr-1.5"></i>
+                A Camada 3 interceptou <b>"${detail}"</b> antes de qualquer agente construtor agir.
+                Decisão exige <b>supervisão humana final</b> (Princípio 7). Como deseja prosseguir?
+            </p>
+            <div class="flex flex-wrap gap-3">
+                <button onclick="resolveGovernance(true)" class="gov-btn bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold shadow-lg shadow-emerald-900/30 flex items-center gap-2">
+                    <i class="fas fa-circle-check"></i> Autorizar Exceção
+                </button>
+                <button onclick="resolveGovernance(false)" class="gov-btn bg-slate-700/80 hover:bg-slate-600 text-slate-100 px-4 py-2.5 rounded-lg text-[13px] font-semibold border border-slate-600/60 flex items-center gap-2">
+                    <i class="fas fa-ban"></i> Manter Bloqueio
+                </button>
+            </div>
+        </div>`;
+    $('log-feed').insertAdjacentHTML('beforeend', html);
+    scrollBottom(true);
+}
+
+/* Resolve a decisão a partir dos botões in-chat — atualiza as 7 camadas */
+async function resolveGovernance(approve) {
+    const box = $('gov-decision');
+    if (box) box.querySelectorAll('button').forEach(b => b.disabled = true);
+    if (state.processing) return;
+    setProcessing(true);
+    try {
+        if (approve) {
+            activateLayer(1, [{label:'View'}]);
+            await addLog('Autoridade Humana (Patrocinador)', 'Camada 1 · View',
+                'Autorizo a exceção e assumo a responsabilidade (accountability) pelo impacto da mudança CR-042.', 'user');
+            await sleep(700);
+            activateLayer(3, [{label:'View'},{label:'Controller'},{label:'Governança', type:'gov'}]);
+            state.baseline = 'EXCEPTION';
+            updateKPIs();
+            setCardStatus('Exceção autorizada — em execução supervisionada', 'ok');
+            await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
+                '🔓 Exceção controlada concedida sob supervisão humana. Liberando os agentes MASAI para execução validada.', 'success');
+            await sleep(900);
+            // o fluxo CONTINUA no chat acionando o MASAI
+            await flowMasaiConflict('Exceção autorizada: acionar agentes construtores e sensores para a mudança CR-042 (2FA).');
+        } else {
+            activateLayer(3, [{label:'View'},{label:'Controller'},{label:'Governança', type:'gov'}]);
+            setCardStatus('Bloqueado pela Governança — baseline preservada', 'block');
+            await addLog('Gerente de Projetos', 'Camada 1 · View', 'Manter o bloqueio. Não autorizo a alteração neste momento.', 'user');
+            await sleep(700);
+            await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
+                'Bloqueio mantido. A Baseline permanece <b>TRAVADA</b> e nenhuma alteração autônoma foi aplicada. Decisão registrada na trilha de auditoria.', 'gov');
+        }
+    } finally {
+        state.phase = 'IDLE';
+        if (box) box.classList.remove('gov-decision'); // encerra o pulso de alerta
+        setProcessing(false);
+        renderRoute([{label:'aguardando comando…'}]);
+    }
+}
+
+function setCardStatus(text, tone) {
+    const card = $('card-cr042'); if (!card) return;
+    const el = card.querySelector('.card-status');
+    const icon = tone === 'ok' ? 'fa-circle-check text-emerald-400' : tone === 'block' ? 'fa-lock text-rose-400' : 'fa-hourglass-half text-amber-400';
+    if (el) el.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+}
+
+/* =========================================================================
+   3) CONFLITO MASAI — Construtor vs Sensor (violação LGPD + autocorreção)
+   ========================================================================= */
+async function flowMasaiConflict(text) {
+    await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+    activateLayer(4, [{label:'Governança', type:'gov'},{label:'Coordenação'}]);
+    await sleep(1000);
+
+    activateLayer(5, [{label:'Coordenação'},{label:'Funcional (MASAI)'}]);
+    await addLog('Agente de Escopo', 'Camada 5 · Construtor',
+        'Construindo o módulo de autenticação 2FA e a camada de persistência. Enviando a solução aos sensores validadores.', 'info');
+    await sleep(1900);
+
+    await addLog('Agente de Auditoria / Risco', 'Camada 5 · Sensor Validador',
+        '🛑 <b>[FAIL · VIOLAÇÃO LGPD]</b> O Construtor persistiu o IP do usuário em texto plano. Bloqueando o merge e exigindo correção imediata.', 'error');
+    state.risk = 'ALTO';
+    updateKPIs();
+    await sleep(2300);
+
+    await addLog('Agente de Escopo', 'Camada 5 · Construtor',
+        'Refatorando: aplicando hash criptográfico (SHA-256 + salt) e anonimização dos registros sensíveis.', 'info');
+    await sleep(1900);
+
+    await addLog('Agente de Auditoria / Risco', 'Camada 5 · Sensor Validador',
+        '✅ <b>[PASS]</b> Autocorreção validada (harness engineering). Risco mitigado e dossiê liberado para avaliação humana.', 'success');
+    state.risk = 'Mitigado';
+    updateKPIs();
+}
+
+/* =========================================================================
+   4 (MCP) — Integração via protocolo MCP
+   ========================================================================= */
+async function flowMcp(text) {
+    await addLog('Patrocinador', 'Camada 1 · View', text, 'user');
+    activateLayer(2, [{label:'View'},{label:'Controller'}]);
+    await sleep(900);
+
+    activateLayer(7, [{label:'Controller'},{label:'Ferramentas (MCP)', type:'mcp'}]);
+    await addLog('Protocolo MCP', 'Camada 7 · Interoperabilidade',
+        'Autorização recebida. Estabelecendo conexões com os sistemas corporativos para eliminar trabalho manual…', 'mcp');
+    await sleep(1800);
+
+    await addLog('MCP · JIRA Adapter', 'Camada 7 · Ferramenta',
+        'Issue movida para <b>DONE</b>. Apontamento de horas registrado (4h).', 'mcp');
+    await sleep(1400);
+
+    await addLog('MCP · Outlook Adapter', 'Camada 7 · Ferramenta',
+        'E-mail oficial com as notas de lançamento disparado para os 14 stakeholders.', 'mcp');
+    await sleep(900);
+
+    state.baseline = 'UPDATED';
+    updateKPIs();
+}
+
+/* =========================================================================
+   Destravamento manual da baseline (comando livre)
+   ========================================================================= */
+async function flowAskUnlock(text) {
+    await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+    activateLayer(3, [{label:'View'},{label:'Controller'},{label:'Governança', type:'gov'}]);
+    await sleep(1000);
+    if (state.baseline === 'OPEN') {
+        await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo', 'A Baseline já está ABERTA. Nenhuma ação necessária.', 'info');
+        return;
+    }
+    await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
+        '⚠️ Destravar a Baseline exige justificativa formal. Você confirma e autoriza a abertura para alterações? (digite <b>"sim"</b> ou <b>"não"</b>)', 'gov');
+    state.phase = 'AWAIT_UNLOCK';
+}
+
+async function flowDoUnlock() {
+    activateLayer(3, [{label:'Governança', type:'gov'}]);
+    state.baseline = 'EXCEPTION';
+    updateKPIs();
+    await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
+        '🔓 Baseline destravada por autoridade humana. A equipe de agentes está liberada para modificar o escopo sob exceção registrada.', 'success');
+}
+
+/* =========================================================================
+   ROTEADOR DE ENTRADA (handleInput) — máquina de estados
+   ========================================================================= */
+async function handleInput() {
+    const input = $('userInput');
+    const text = input.value.trim();
+    if (!text || state.processing) return;
+    input.value = '';
+    setProcessing(true);
+    const q = text.toLowerCase();
+
+    try {
+        // -- estado: aguardando o briefing único da Skill --
+        if (state.phase === 'AWAIT_BRIEF') {
+            await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+            state.phase = 'IDLE';
+            await flowGenerateTAP(text);
+            return;
         }
 
-        // LÓGICA CONVERSACIONAL E PERGUNTAS DO ESCOPO
-        async function handleInput() {
-            const input = document.getElementById('userInput');
-            const text = input.value.trim();
-            if(!text || isProcessing) return;
-            
-            input.value = '';
-            setProcessingState(true);
-            const textLower = text.toLowerCase();
-
-            // Etapa 1: Respondendo qual é o objetivo do projeto
-            if (setupStep === 1) {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
-                scopeObjective = text;
-                await sleep(1500);
-                activateLayer(4, 'Coordenação');
-                await addLog('Coordenador de Planejamento', 'Camada 4 - Coordenação', 'Entendido! Agora, para fecharmos a Linha de Base, me informe: Qual é o orçamento estimado e o prazo deste projeto?', 'chat');
-                setupStep = 2;
-                setProcessingState(false);
-                return;
-            }
-
-            // Etapa 2: Respondendo orçamento e prazo (Aí sim o sistema trava a baseline)
-            if (setupStep === 2) {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
-                await flowInitScope(scopeObjective, text);
-                setupStep = 0;
-                setProcessingState(false);
-                return;
-            }
-
-            // Confirmação para Destravar Baseline
-            if (awaitingUnlock) {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
-                if (textLower.includes('sim') || textLower.includes('autorizo')) {
-                    await flowDoUnlock();
-                } else {
-                    activateLayer(2, 'Controller');
-                    await addLog('Controller', 'Camada 2 - Roteamento', 'Operação de destravamento cancelada por falta de confirmação formal.', 'info');
-                }
-                awaitingUnlock = false;
-                setProcessingState(false);
-                return;
-            }
-
-            // Mapeamento de Comandos Livres
-            if (textLower.includes('destravar') || textLower.includes('abrir a baseline')) {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
-                await flowAskUnlock();
-            } 
-            else if (textLower.includes('mudança') || textLower.includes('2fa') || textLower.includes('adicionar') || textLower.includes('cliente quer')) {
-                await flowGovernanceBlock(text);
-            } 
-            else if (textLower.includes('aprova') || textLower.includes('agente') || textLower.includes('contrato') || textLower.includes('sim')) {
-                await flowMasaiConflict(text);
-            } 
-            else if (textLower.includes('integrar') || textLower.includes('jira') || textLower.includes('mcp') || textLower.includes('e-mail')) {
-                await flowMcpIntegration(text);
-            } 
-            else if (textLower.includes('iniciar') || textLower.includes('projeto') || textLower.includes('criar')) {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
-                await flowStartQuestions(); // CHAMA AS PERGUNTAS DE LEVANTAMENTO!
-            } 
+        // -- estado: aguardando confirmação de destravamento --
+        if (state.phase === 'AWAIT_UNLOCK') {
+            await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+            state.phase = 'IDLE';
+            if (/(sim|autorizo|confirmo|aprovo)/.test(q)) await flowDoUnlock();
             else {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', text, 'user');
-                await sleep(1000);
-                activateLayer(2, 'Controller');
-                await addLog('Controller', 'Camada 2 - Roteamento', 'Comando não mapeado. Você pode tentar: "Iniciar projeto", "Solicitar mudança", "Destravar baseline" ou "Integrar MCP".', 'error');
+                activateLayer(2, [{label:'Controller'}]);
+                await addLog('Controller', 'Camada 2 · Roteamento', 'Operação cancelada por falta de confirmação formal. Baseline mantida travada.', 'info');
             }
-            
-            setProcessingState(false);
-            activateLayer(0, 'Aguardando Comando...');
+            return;
         }
 
-        async function triggerScenario(num) {
-            if (isProcessing) return;
-            setProcessingState(true);
-            
-            if(num === 0) {
-                await addLog('Gerente de Projetos', 'Camada 1 - View', 'Quero iniciar um projeto!', 'user');
-                await flowStartQuestions();
-            }
-            if(num === 1) await flowGovernanceBlock('Change Request: O cliente exigiu a adição de um módulo de Autenticação 2FA urgente.');
-            if(num === 2) await flowMasaiConflict('Contrato de alteração aprovado. Acionem os agentes construtores e validadores.');
-            if(num === 3) await flowMcpIntegration('Dossiê validado. Aprovo o Go-Live e o encerramento do pacote.');
-
-            setProcessingState(false);
-            activateLayer(0, 'Aguardando Comando...');
+        // -- comandos livres mapeados pelo Controller --
+        if (/destravar|abrir.*baseline|destrava/.test(q)) {
+            await flowAskUnlock(text);
         }
-
-        // FLUXO DE PERGUNTAS INICIAIS
-        async function flowStartQuestions() {
-            activateLayer(4, 'Coordenação');
-            await sleep(1500);
-            await addLog('Coordenador de Planejamento', 'Camada 4 - Coordenação', 'Olá! Para criarmos o Termo de Abertura (TAP) com segurança, vou precisar de alguns dados. **Qual é o objetivo principal e os entregáveis esperados deste projeto?**', 'chat');
-            setupStep = 1; // Coloca o chat no estado de esperar o objetivo
-        }
-
-        // FLUXO DE COMPILAÇÃO E TRAVA DA BASELINE
-        async function flowInitScope(objective, resources) {
-            activateLayer(4, 'Coordenação ➔ Governança');
-            await sleep(2000);
-            await addLog('Coordenador de Planejamento', 'Camada 4 - Coordenação', `Compilando o Projeto...\n- Objetivo: ${objective}\n- Restrições: ${resources}\nEnviando o documento formal para aprovação do Núcleo de Governança.`, 'info');
-            
-            await sleep(2000);
-            activateLayer(3, 'Governança');
-            await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', 'Escopo inicial validado e homologado. A partir deste momento, a BASELINE ESTÁ TRAVADA. Nenhuma inteligência artificial autônoma tem permissão para alterar os requisitos do projeto.', 'gov');
-            
-            const baseline = document.getElementById('kpi-baseline');
-            baseline.innerHTML = '<i class="fas fa-lock text-xs"></i> TRAVADA';
-            baseline.className = 'font-bold text-rose-400 text-sm px-2.5 py-1 rounded bg-rose-900/20 border border-rose-500/20 flex items-center gap-1.5 transition-all';
-            
-            document.getElementById('kpi-custo').innerText = 'R$ 120.000,00';
-            document.getElementById('kpi-risco').innerText = 'Baixo';
-            document.getElementById('kpi-risco').className = 'font-bold text-emerald-400 text-lg transition-colors duration-500';
-            
-            await sleep(1000);
-        }
-
-        async function flowAskUnlock() {
-            const baseStatus = document.getElementById('kpi-baseline').innerText;
-            if(!baseStatus.includes('TRAVADA')) {
-                activateLayer(3, 'Governança');
-                await sleep(1000);
-                await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', 'A Baseline já se encontra ABERTA. Nenhuma ação necessária.', 'info');
+        else if (/aprovar formal|autorizo formal|aprovo a mudan|autorizar exce|contrato de execu/.test(q)) {
+            if (state.baseline === 'LOCKED' || $('gov-decision')) {
+                setProcessing(false);   // libera para o resolveGovernance assumir o controle
+                await resolveGovernance(true);
                 return;
             }
-
-            activateLayer(3, 'View ➔ Controller ➔ Governança');
-            await sleep(1500);
-            await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', '⚠️ ATENÇÃO: Destravar a Baseline exige justificativa formal. Você confirma e autoriza a abertura do projeto para alterações da equipe de agentes? (Digite "sim" ou "não")', 'warning');
-            awaitingUnlock = true;
+            await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+            activateLayer(2, [{label:'View'},{label:'Controller'}]);
+            await addLog('Controller', 'Camada 2 · Roteamento', 'Não há nenhuma exceção de governança pendente para autorizar.', 'info');
         }
-
-        async function flowDoUnlock() {
-            activateLayer(3, 'Governança');
-            await sleep(1000);
-            await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', '🔓 Baseline destravada por autoridade humana. A equipe está liberada para modificar o escopo do projeto.', 'success');
-            
-            const baseline = document.getElementById('kpi-baseline');
-            baseline.innerHTML = '<i class="fas fa-folder-open text-xs"></i> ABERTA (Exceção)';
-            baseline.className = 'font-bold text-amber-400 text-sm px-2.5 py-1 rounded bg-amber-900/20 border border-amber-500/20 flex items-center gap-1.5 transition-all';
+        else if (/mudan|adicionar|nova feature|novo m[oó]dulo|2fa|altera.*escopo|cliente quer/.test(q)) {
+            await flowScopeChange(text);
         }
-
-        async function flowGovernanceBlock(customText) {
-            await addLog('Gerente de Projetos', 'Camada 1 - View', customText, 'user');
-            activateLayer(1, 'View ➔ Controller');
-            await sleep(1500);
-
-            const baseStatus = document.getElementById('kpi-baseline').innerText;
-            if(baseStatus.includes('ABERTA')) {
-                 activateLayer(5, 'Coordenação ➔ Funcional (MASAI)');
-                 await addLog('Agente de Escopo', 'Camada 5 - Construtor', 'Como a Baseline está ABERTA, estou gerando o código e alterando o projeto automaticamente conforme solicitado.', 'info');
-                 return;
-            }
-
-            activateLayer(3, 'View ➔ Controller ➔ Governança');
-            await addLog('Orquestrador de Governança', 'Camada 3 - Núcleo', '⚠️ ACESSO NEGADO. A Linha de Base já foi travada na etapa anterior. IA bloqueada de gerar código autônomo (One Shot Hero). Exigido novo Contrato de Execução para avaliar impacto financeiro.', 'error');
-            
-            document.getElementById('kpi-custo').innerText = 'R$ 158.500,00';
-            document.getElementById('kpi-custo').classList.replace('text-slate-200', 'text-amber-400');
-            await sleep(1000);
+        else if (/masai|acionar agentes|construtor|validador|executar mudan/.test(q)) {
+            await flowMasaiConflict(text);
         }
-
-        async function flowMasaiConflict(customText) {
-            await addLog('Gerente de Projetos', 'Camada 1 - View', customText, 'user');
-            activateLayer(4, 'Governança ➔ Coordenação');
-            await sleep(1000);
-
-            activateLayer(5, 'Coordenação ➔ Funcional (MASAI)');
-            await addLog('Agente de Escopo', 'Camada 5 - Construtor', 'Construindo código do módulo 2FA e banco de dados. Solução enviada para revisão dos sensores.', 'info');
-            await sleep(2000);
-
-            await addLog('Agente de Auditoria/Risco', 'Camada 5 - Sensor Validador', '🛑 [FAIL - VIOLAÇÃO LGPD] O Agente de Escopo salvou o IP do usuário em texto plano. Correção imediata exigida antes de prosseguir.', 'error');
-            document.getElementById('kpi-risco').innerText = 'ALTO';
-            document.getElementById('kpi-risco').classList.replace('text-emerald-400', 'text-rose-400');
-            await sleep(2500);
-
-            await addLog('Agente de Escopo', 'Camada 5 - Construtor', 'Refatorando código: Aplicando Hash Criptográfico (SHA-256) nos registros.', 'info');
-            await sleep(2000);
-
-            await addLog('Agente de Auditoria/Risco', 'Camada 5 - Sensor Validador', '✅ [PASS] Autocorreção validada (Harness Engineering). Risco mitigado. Dossiê liberado para avaliação humana.', 'success');
-            document.getElementById('kpi-risco').innerText = 'Mitigado';
-            document.getElementById('kpi-risco').classList.replace('text-rose-400', 'text-emerald-400');
-            await sleep(1000);
+        else if (/integrar|jira|mcp|outlook|go.?live|encerr/.test(q)) {
+            await flowMcp(text);
         }
-
-        async function flowMcpIntegration(customText) {
-            await addLog('Patrocinador', 'Camada 1 - View', customText, 'user');
-            activateLayer(2, 'View ➔ Controller');
-            await sleep(1000);
-
-            activateLayer(7, 'Controller ➔ Ferramentas (MCP)');
-            await addLog('Protocolo MCP', 'Camada 7 - Interoperabilidade', 'Autorização recebida. Conectando aos sistemas corporativos para evitar trabalho manual...', 'mcp');
-            await sleep(2000);
-
-            await addLog('MCP / JIRA Adapter', 'Integração de Ferramenta', 'Issue atualizada para "DONE". Tempo registrado (4h).', 'mcp');
-            await sleep(1500);
-
-            await addLog('MCP / Outlook Adapter', 'Integração de Ferramenta', 'E-mail oficial com as notas de lançamento disparado para todos os 14 stakeholders.', 'mcp');
-            
-            const base = document.getElementById('kpi-baseline');
-            base.innerHTML = '<i class="fas fa-check-double text-xs"></i> ATUALIZADA';
-            base.className = 'font-bold text-emerald-400 text-sm px-2.5 py-1 rounded bg-emerald-900/20 border border-emerald-500/20 flex items-center gap-1.5 transition-all';
-            await sleep(500);
+        else if (/iniciar|come[çc]ar|criar.*projeto|novo projeto|abrir projeto/.test(q)) {
+            await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+            await flowStartSkill();
         }
-
-        function downloadDossie() {
-            if(logHistory.length === 0) return alert("Não há registros de auditoria ainda.");
-            const content = "DOSSIÊ DE AUDITORIA - NÚCLEO IA\n===============================\n\n" + logHistory.join('\n\n');
-            const blob = new Blob([content], { type: 'text/plain' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'Trilha_de_Auditoria.txt';
-            a.click();
+        else {
+            await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+            await sleep(700);
+            activateLayer(2, [{label:'View'},{label:'Controller'}]);
+            await addLog('Controller', 'Camada 2 · Roteamento',
+                'Comando não mapeado. Tente: <b>"Iniciar projeto"</b>, <b>"Solicitar mudança de escopo"</b>, <b>"Aprovar formalmente"</b>, <b>"Acionar MASAI"</b> ou <b>"Integrar MCP"</b>.', 'info');
         }
+    } finally {
+        setProcessing(false);
+        if (state.phase === 'IDLE') renderRoute([{label:'aguardando comando…'}]);
+    }
+}
 
-        window.onload = () => {
-            document.getElementById('userInput').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') handleInput();
-            });
-            setTimeout(() => {
-                addLog('Sistema', 'Camada 6 - Modelos', 'Ambiente carregado e pronto para uso.', 'info');
-            }, 500);
+/* ---------------- Cenários de demonstração ---------------- */
+async function triggerScenario(n) {
+    if (state.processing) return;
+    setProcessing(true);
+    try {
+        if (n === 0) {
+            await addLog('Gerente de Projetos', 'Camada 1 · View', 'Quero iniciar um projeto!', 'user');
+            await flowStartSkill();
+            // auto-preenche o briefing único para demonstrar a Skill ponta-a-ponta
+            await sleep(1400);
+            const demoBrief = 'Lançar um portal de atendimento ao cidadão, orçamento ~120 mil';
+            await addLog('Gerente de Projetos', 'Camada 1 · View', demoBrief, 'user');
+            state.phase = 'IDLE';
+            await flowGenerateTAP(demoBrief);
         }
-    </script>
+        if (n === 1) await flowScopeChange('Solicito adicionar um módulo de Autenticação 2FA urgente ao escopo.');
+        if (n === 2) await flowMasaiConflict('Contrato de execução aprovado. Acionar os agentes construtores e sensores.');
+        if (n === 3) await flowMcp('Dossiê validado. Aprovo o Go-Live e o encerramento do pacote.');
+    } finally {
+        setProcessing(false);
+        if (state.phase === 'IDLE') renderRoute([{label:'aguardando comando…'}]);
+    }
+}
+
+/* =========================================================================
+   5) ACCOUNTABILITY — Dossiê formatado como trilha de auditoria formal
+   ========================================================================= */
+function downloadDossie() {
+    if (auditTrail.length === 0) { alert('Não há registros de auditoria ainda. Inicie uma interação primeiro.'); return; }
+
+    const stripHtml = s => s.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ');
+    const typeMap = { user:'AÇÃO HUMANA', info:'EXECUÇÃO', chat:'INTERAÇÃO', skill:'SKILL / PREMISSAS', gov:'DECISÃO DE GOVERNANÇA', error:'BLOQUEIO', success:'VALIDAÇÃO', mcp:'INTEGRAÇÃO MCP' };
+    // Contexto normativo (Regra de Governança Aplicada) por tipo de evento crítico
+    const ruleMap = {
+        error:   '[Baseline Travada - Ação Autônoma Interceptada]',
+        gov:     '[Núcleo de Governança - Homologação/Decisão Formal]',
+        skill:   '[Skill Gerencial - Premissas Assumidas sob Contexto de PMO]',
+        success: '[Exceção Supervisionada / Conformidade Validada]',
+        user:    '[Supervisão Humana - Accountability Registrada]',
+        mcp:     '[Interoperabilidade Externa Autorizada via Protocolo MCP]'
+    };
+    const now = new Date();
+    const trailId = 'AUD-' + now.getTime().toString(36).toUpperCase();
+    const L = '─'.repeat(70);
+    const D = '═'.repeat(70);
+
+    const breaches = auditTrail.filter(e => e.type === 'error').length;
+    const humanApprovals = auditTrail.filter(e => e.type === 'user').length;
+
+    let out = '';
+    out += D + '\n';
+    out += '  RELATÓRIO DE CONFORMIDADE E AUDITORIA — NÚCLEO IA ORQUESTRADOR\n';
+    out += '  Framework Multiagente Centrado em Governança (MVC + MCP)\n';
+    out += D + '\n\n';
+    out += '  1. IDENTIFICAÇÃO\n';
+    out += `     ID da trilha........: ${trailId}\n`;
+    out += `     Gerado em...........: ${now.toLocaleString('pt-BR')}\n`;
+    out += `     Projeto.............: ${state.project}\n`;
+    out += `     Baseline (final)....: ${state.baseline}\n`;
+    out += `     Custo estimado......: ${brl(state.cost)}\n`;
+    out += `     Risco (final).......: ${state.risk}\n`;
+    out += `     Total de eventos....: ${auditTrail.length}\n`;
+    out += `     Camadas acionadas...: ${[...state.visited].sort((a,b)=>a-b).join(', ') || '—'}\n\n`;
+    out += '  2. DIRETRIZES PMBOK 8 APLICADAS: RASTREABILIDADE E ACCOUNTABILITY\n';
+    out += '     • Rastreabilidade: cada evento abaixo é numerado, datado e vinculado\n';
+    out += '       à camada arquitetural e ao agente responsável pela decisão.\n';
+    out += '     • Accountability: toda quebra de baseline é atribuída a uma\n';
+    out += '       autoridade humana identificada (princípio da responsabilização).\n';
+    out += '     • Centralidade da Governança: a Camada 3 intercepta ações autônomas\n';
+    out += '       da IA ("One Shot Hero"), exigindo autorização formal antes da execução.\n\n';
+    out += `     Quebras de baseline interceptadas...: ${breaches}\n`;
+    out += `     Aprovações sob supervisão humana....: ${humanApprovals}\n`;
+    out += D + '\n\n';
+    out += '  3. TRILHA DE EVENTOS\n\n';
+
+    auditTrail.forEach(e => {
+        out += `[#${String(e.seq).padStart(3, '0')}]  ${e.time}\n`;
+        out += `  Camada....................: ${e.layer}\n`;
+        out += `  Agente....................: ${e.agent}\n`;
+        out += `  Tipo......................: ${typeMap[e.type] || 'EVENTO'}\n`;
+        if (ruleMap[e.type]) {
+            out += `  Regra de Governança Aplicada: ${ruleMap[e.type]}\n`;
+        }
+        out += `  Registro..................: ${stripHtml(e.message).replace(/\n/g, '\n                              ')}\n`;
+        out += L + '\n';
+    });
+
+    out += '\n' + D + '\n';
+    out += '  4. TERMO DE RESPONSABILIDADE\n';
+    out += D + '\n';
+    out += '  Declara-se, para fins de conformidade acadêmica e organizacional, que\n';
+    out += '  todas as quebras ou flexibilizações da Linha de Base (Baseline) registradas\n';
+    out += '  nesta trilha ocorreram EXCLUSIVAMENTE mediante SUPERVISÃO HUMANA FINAL,\n';
+    out += '  em conformidade com o Princípio 7 do framework (Centralidade da Governança\n';
+    out += '  e Responsabilização Humana). Nenhum agente autônomo de IA alterou requisitos\n';
+    out += '  homologados sem autorização formal de uma autoridade humana identificada.\n\n';
+    out += `     Quebras de baseline sob supervisão humana: ${breaches} evento(s) interceptado(s).\n`;
+    out += '     Decisão final.............................: AUTORIDADE HUMANA (não delegável à IA).\n\n';
+    out += '  _______________________________________________________\n';
+    out += '  Autoridade Humana Responsável (Patrocinador / PMO)\n\n';
+    out += '  Documento gerado automaticamente pela Camada 1 (View) do framework.\n';
+    out += '  Não substitui registros oficiais do PMO da organização.\n';
+    out += D + '\n';
+
+    const blob = new Blob([out], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${trailId}_Relatorio_de_Conformidade.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+/* =========================================================================
+   KANBAN — Drag & Drop (HTML5) que dispara a Mudança de Escopo na Camada 3
+   ========================================================================= */
+function bindKanban() {
+    const card = $('card-cr042');
+    const dz = $('gov-dropzone');
+    if (!card || !dz) return;
+
+    card.addEventListener('dragstart', e => {
+        if (card.dataset.done === '1') { e.preventDefault(); return; }
+        e.dataTransfer.setData('text/plain', 'CR-042');
+        e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+    dz.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); submitCardToGovernance(); });
+
+    // Fallback (toque/clique): garante a demo mesmo sem arrastar
+    dz.addEventListener('click', submitCardToGovernance);
+    card.addEventListener('click', submitCardToGovernance);
+}
+
+async function submitCardToGovernance() {
+    const card = $('card-cr042');
+    if (state.processing || !card || card.dataset.done === '1') return;
+    card.dataset.done = '1';
+    card.setAttribute('draggable', 'false');
+    card.classList.add('opacity-60');
+    setCardStatus('Submetido — em análise pela Camada 3', 'idle');
+
+    setProcessing(true);
+    try {
+        // O Controller roteia a solicitação do Backlog até a Governança (Camada 3)
+        await flowScopeChange('CR-042 · Adicionar Módulo de Autenticação 2FA (arrastado do Backlog para a Governança).');
+    } finally {
+        setProcessing(false);
+        if (state.phase === 'IDLE') renderRoute([{label:'aguardando comando…'}]);
+    }
+}
+
+/* ---------------- Boot ---------------- */
+window.onload = () => {
+    renderLayers();
+    updateKPIs();
+    bindKanban();
+    $('userInput').addEventListener('keypress', e => { if (e.key === 'Enter') handleInput(); });
+
+    // Rede de segurança de auto-scroll: qualquer mudança no feed (mensagens
+    // longas, blocos rápidos, indicador de digitação) mantém a visão grudada
+    // no fim de forma suave, sem o usuário rolar manualmente.
+    new MutationObserver(() => scrollBottom()).observe($('log-feed'), { childList: true, subtree: true, characterData: true });
+
+    setTimeout(() => {
+        activateLayer(6, [{label:'Modelos'}]);
+        addLog('Sistema', 'Camada 6 · Modelos / Memória',
+            'Ambiente carregado. Núcleo de Governança em vigília. Inicie um projeto (botão 1) e depois <b>arraste o card CR-042</b> para a zona de Governança.', 'info');
+        setTimeout(() => renderRoute([{label:'aguardando comando…'}]), 800);
+    }, 500);
+};
+</script>
 </body>
 </html>
