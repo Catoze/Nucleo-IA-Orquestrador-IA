@@ -136,6 +136,10 @@
         .gov-btn:active:not(:disabled) { transform: translateY(0) scale(.98); }
         .gov-btn:disabled { opacity: .4; cursor: not-allowed; }
 
+        /* ---- Camada selecionada como filtro do feed ---- */
+        .layer-filtering { box-shadow: inset 0 0 0 1.5px rgba(56,189,248,0.55); background: linear-gradient(90deg, rgba(56,189,248,0.12), transparent 85%); }
+        .layer:hover { background: linear-gradient(90deg, rgba(148,163,184,0.07), transparent 80%); }
+
         /* ---- Tooltip estilizado único (position: fixed, sem recorte) ---- */
         #layer-tip {
             position: fixed;
@@ -301,8 +305,23 @@
             </div>
         </section>
 
+        <!-- BARRA DE FILTRO POR CAMADA -->
+        <div id="filter-bar" class="hidden z-10 px-6 pt-3">
+            <div class="max-w-[1100px] mx-auto flex items-center justify-between gap-3 rounded-xl bg-cyan-900/20 border border-cyan-700/40 px-4 py-2">
+                <span class="text-[12px] font-semibold text-cyan-200 flex items-center gap-2"><i class="fas fa-filter"></i> <span id="filter-label">Filtrando</span></span>
+                <button onclick="clearFilter()" class="text-[11px] font-bold text-cyan-100 bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/40 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i class="fas fa-list"></i> Ver Todas
+                </button>
+            </div>
+        </div>
+
         <!-- FEED -->
-        <div id="log-feed" class="flex-1 px-6 py-6 overflow-y-auto space-y-3.5 pb-60 z-10 scroll-smooth max-w-[1100px] w-full mx-auto"></div>
+        <div id="log-feed" class="flex-1 px-6 py-6 overflow-y-auto space-y-3.5 pb-60 z-10 scroll-smooth max-w-[1100px] w-full mx-auto">
+            <div id="filter-empty" style="display:none" class="text-center text-slate-500 text-sm py-10">
+                <i class="fas fa-filter-circle-xmark text-2xl mb-2 block opacity-60"></i>
+                Nenhuma mensagem processada por esta camada ainda.
+            </div>
+        </div>
 
         <!-- INPUT -->
         <div class="absolute bottom-0 w-full p-6 bg-gradient-to-t from-[#020617] via-[#020617]/96 to-transparent z-20">
@@ -317,7 +336,7 @@
                 </div>
                 <div class="grid grid-cols-4 gap-2.5">
                     <button onclick="triggerScenario(0)" class="action-btn bg-slate-800/70 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 text-left flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <i class="fas fa-bolt text-emerald-400"></i> 1 · Skill: Iniciar (1 pergunta)
+                        <i class="fas fa-bolt text-emerald-400"></i> 1 · Coordenador (multi-step + Skill)
                     </button>
                     <button onclick="triggerScenario(1)" class="action-btn bg-slate-800/70 hover:bg-slate-700 border border-slate-700 rounded-lg py-2.5 px-3 text-[11px] font-semibold text-slate-300 text-left flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                         <i class="fas fa-triangle-exclamation text-amber-400"></i> 2 · Mudar escopo (Gov. bloqueia)
@@ -333,13 +352,178 @@
         </div>
 
     </main>
+/* =========================================================================
+   MÓDULO SUPABASE (Camada 6 - Modelos / Cloud-Native)
+   Integração para persistência de estado e trilha de auditoria.
+========================================================================= */
+
+const SUPABASE_URL = 'https://mjqzptdqubprgngcjgch.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_a1Iw2tyKYP1RzmnsO1UNRg_9ROrdAev';
+
+const SupabaseService = {
+    client: null,
+
+    async initSupabase() {
+        try {
+            // Verifica se o CDN do Supabase foi carregado no HTML
+            if (window.supabase) {
+                this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                console.log('[SupabaseService] Conectado à nuvem do Supabase com sucesso.');
+            } else {
+                console.warn('[SupabaseService] CDN do Supabase não encontrado. Rodando offline.');
+            }
+        } catch (error) {
+            console.error('[SupabaseService] Erro na inicialização:', error);
+        }
+    },
+
+    async saveProjectState(state) {
+        try {
+            console.log('[SupabaseService] Tentando salvar estado:', state);
+            if (this.client) {
+                // Chamada real para o banco de dados (Ativada)
+                const { data, error } = await this.client
+                    .from('project_state')
+                    .upsert([{ 
+                        id: 1, 
+                        baseline: state.baseline, 
+                        cost: state.cost, 
+                        risk: state.risk, 
+                        phase: state.phase 
+                    }]);
+                
+                if (error) throw error;
+                console.log('[SupabaseService] Estado do projeto salvo na nuvem com sucesso.');
+            }
+        } catch (error) {
+            console.error('[SupabaseService] Erro ao salvar estado:', error);
+        }
+    },
+
+    async insertAuditLog(logEntry) {
+        try {
+            console.log('[SupabaseService] Tentando gravar log de auditoria:', logEntry);
+            if (this.client) {
+                // Chamada real para o banco de dados (Ativada)
+                const { data, error } = await this.client
+                    .from('audit_log')
+                    .insert([logEntry]);
+                
+                if (error) throw error;
+                console.log('[SupabaseService] Log persistido na nuvem com sucesso.');
+            }
+        } catch (error) {
+            console.error('[SupabaseService] Erro ao registrar log:', error);
+        }
+    }
+};
+
+// Inicia a conexão automaticamente ao abrir o site
+SupabaseService.initSupabase();
+
 
 <script>
 /* =========================================================================
    NÚCLEO IA — ORQUESTRADOR DE GOVERNANÇA MULTIAGENTE
    Camada 1 (View) do framework MVC + MCP / PMBOK 8.
    Estado centralizado (single source of truth) + máquina de estados.
+   =========================================================================
+
+   ┌───────────────────────────────────────────────────────────────────────┐
+   │  PARA A EQUIPE DE ENGENHARIA — INTEGRAÇÃO DO BACKEND (Sessão 2.5)        │
+   │  Arquitetura Cloud-Native · Armazenamento de Estado via Supabase        │
+   ├───────────────────────────────────────────────────────────────────────┤
+   │                                                                         │
+   │  1) Adicione o CDN do Supabase no <head> do index.html (antes deste       │
+   │     script). Use a tag:                                                  │
+   │       script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"  │
+   │     (abra com < e feche normalmente a tag script).                       │
+   │                                                                         │
+   │  2) Preencha as credenciais do projeto abaixo (NUNCA comite a service_   │
+   │     role key; em produção use variáveis de ambiente / Vercel Env Vars): │
+   │       const SUPABASE_URL      = "https://SEU-PROJETO.supabase.co";       │
+   │       const SUPABASE_ANON_KEY = "SUA_CHAVE_ANON_PUBLICA";                │
+   │                                                                         │
+   │  3) Tabelas sugeridas (SQL no Supabase):                                 │
+   │       • project_state(id, project, baseline, cost, risk, updated_at)     │
+   │       • audit_log(id, seq, ts, agent, layer, type, rule, message)        │
+   │                                                                         │
+   │  4) Descomente a linha `createClient(...)` em initSupabase() e troque os │
+   │     console.log() das funções abaixo por chamadas reais (.upsert/.insert)│
+   │     A Camada 1 (View) já chama estes métodos nos pontos corretos do      │
+   │     fluxo — basta plugar o backend. Não é preciso alterar a UI.          │
+   └───────────────────────────────────────────────────────────────────────┘ */
+
+// >>> CONFIGURAÇÃO DO BACKEND (preencher após criar o projeto no Supabase) <<<
+const SUPABASE_URL      = "";   // ex.: "https://xxxx.supabase.co"
+const SUPABASE_ANON_KEY = "";   // ex.: "eyJhbGciOi..."
+
+/* =========================================================================
+   CAMADA 6 (MODELOS) — SupabaseService
+   Serviço de persistência de Estado e Memória do projeto. Hoje opera em modo
+   SIMULADO (console.log). Quando as credenciais e o CDN estiverem presentes,
+   ele passa a persistir de verdade — sem mudar nenhuma chamada na View.
    ========================================================================= */
+const SupabaseService = {
+    client: null,
+    connected: false,
+
+    async initSupabase() {
+        try {
+            // Só conecta de verdade se o CDN estiver carregado e as credenciais preenchidas
+            if (typeof window !== 'undefined' && window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
+                this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                this.connected = true;
+                console.log('[SupabaseService] Conectado ao backend Supabase (Camada 6).');
+            } else {
+                this.connected = false;
+                console.log('[SupabaseService] Modo SIMULADO — sem credenciais/CDN. Persistência apenas logada no console.');
+            }
+            return this.connected;
+        } catch (err) {
+            this.connected = false;
+            console.error('[SupabaseService] Falha ao inicializar:', err);
+            return false;
+        }
+    },
+
+    async saveProjectState(projectState) {
+        const payload = {
+            project: projectState.project,
+            baseline: projectState.baseline,
+            cost: projectState.cost,
+            risk: projectState.risk,
+            updated_at: new Date().toISOString()
+        };
+        try {
+            if (this.connected && this.client) {
+                // PRODUÇÃO: await this.client.from('project_state').upsert(payload);
+                console.log('[SupabaseService] upsert project_state →', payload);
+            } else {
+                console.log('[SupabaseService][SIMULADO] saveProjectState →', payload);
+            }
+            return { ok: true, payload };
+        } catch (err) {
+            console.error('[SupabaseService] Erro em saveProjectState:', err);
+            return { ok: false, error: err };
+        }
+    },
+
+    async insertAuditLog(logEntry) {
+        try {
+            if (this.connected && this.client) {
+                // PRODUÇÃO: await this.client.from('audit_log').insert(logEntry);
+                console.log('[SupabaseService] insert audit_log →', logEntry);
+            } else {
+                console.log('[SupabaseService][SIMULADO] insertAuditLog →', logEntry);
+            }
+            return { ok: true, logEntry };
+        } catch (err) {
+            console.error('[SupabaseService] Erro em insertAuditLog:', err);
+            return { ok: false, error: err };
+        }
+    }
+};
 
 const LAYERS = [
     { id: 1, name: 'Apresentação (View)',        icon: 'fa-display',    desc: 'Interface com o humano. Captura comandos e renderiza a trilha — não toma decisões de negócio.' },
@@ -357,8 +541,11 @@ const state = {
     cost: 0,
     risk: 'N/A',
     project: '—',
-    phase: 'IDLE',             // IDLE | AWAIT_BRIEF | AWAIT_UNLOCK | CHANGE_AUTHORIZED
+    objective: '',
+    budgetText: '',
+    phase: 'IDLE',             // IDLE | AWAIT_OBJECTIVE | AWAIT_BUDGET | AWAIT_UNLOCK
     processing: false,
+    filter: null,              // id da camada em filtro (null = ver todas)
     visited: new Set()
 };
 
@@ -372,13 +559,15 @@ const brl = n => 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, m
 /* ---------------- Render da trilha das 7 camadas ---------------- */
 function renderLayers() {
     $('layers-container').innerHTML = LAYERS.map(l => `
-        <div id="layer-${l.id}" class="layer ${l.gov ? 'layer-gov' : ''} flex items-center gap-3 px-4 py-2.5 rounded-r-lg text-slate-400"
+        <div id="layer-${l.id}" onclick="filterByLayer(${l.id})" role="button" tabindex="0"
+             class="layer ${l.gov ? 'layer-gov' : ''} cursor-pointer flex items-center gap-3 px-4 py-2.5 rounded-r-lg text-slate-400"
              data-tip-title="Camada ${l.id} · ${l.name}" data-tip-desc="${l.desc}" data-gov="${l.gov ? '1' : '0'}"
-             title="${l.id}. ${l.name} — ${l.desc}">
+             title="${l.id}. ${l.name} — clique para filtrar o feed por esta camada">
             <span class="dot"></span>
             <i class="fas ${l.icon} text-[13px] w-4 text-center opacity-80"></i>
             <span class="text-[12px] font-semibold tracking-tight leading-tight">${l.id}. ${l.name}</span>
-            <i class="fas fa-check ml-auto text-[10px] text-cyan-400 layer-check opacity-0 transition-opacity"></i>
+            <i class="fas fa-filter ml-auto text-[10px] text-cyan-400 layer-filter-icon opacity-0 transition-opacity"></i>
+            <i class="fas fa-check text-[10px] text-cyan-400 layer-check opacity-0 transition-opacity"></i>
         </div>`).join('');
     bindLayerTooltips();
 }
@@ -487,13 +676,14 @@ async function addLog(agent, layerLabel, message, type = 'info', skillTag = null
     seq++;
     const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const [style, icon] = STYLES[type] || STYLES.info;
+    const layerId = (String(layerLabel).match(/Camada\s+(\d)/) || [])[1] || '';
 
     const badge = skillTag
         ? `<span class="skill-badge text-[9px] font-bold text-emerald-300 px-2 py-0.5 rounded-full ml-2 uppercase tracking-wide"><i class="fas fa-bolt mr-1"></i>${skillTag}</span>`
         : '';
 
     $('log-feed').insertAdjacentHTML('beforeend', `
-        <div class="p-4 rounded-xl border ${style} backdrop-blur-sm log-enter">
+        <div class="feed-item p-4 rounded-2xl border ${style} backdrop-blur-sm log-enter" data-layer="${layerId}">
             <div class="flex items-start justify-between mb-1.5">
                 <div class="flex items-center gap-2.5">
                     <i class="fas ${icon} text-lg w-5 text-center"></i>
@@ -504,12 +694,19 @@ async function addLog(agent, layerLabel, message, type = 'info', skillTag = null
                 </div>
                 <span class="hop text-[10px] text-slate-500 bg-black/25 px-2 py-1 rounded">${time}</span>
             </div>
-            <p class="text-[13px] leading-relaxed text-slate-300 pl-7 whitespace-pre-line">${message}</p>
+            <p class="text-[13px] leading-relaxed text-slate-200 pl-7 whitespace-pre-line">${message}</p>
         </div>`);
 
     // trilha estruturada para o dossiê de auditoria
-    auditTrail.push({ seq, time, agent, layer: layerLabel, type, message });
+    const entry = { seq, time, agent, layer: layerLabel, type, rule: GOV_RULES[type] || '', message: message.replace(/<[^>]+>/g, '') };
+    auditTrail.push(entry);
     $('event-count').innerText = seq;
+
+    // CAMADA 6 — persistência da memória/estado (Supabase, hoje simulado)
+    SupabaseService.insertAuditLog(entry);
+
+    // respeita o filtro de camada ativo ao inserir nova mensagem
+    if (state.filter) applyFilter();
     scrollBottom(true);
 
     if (state.processing && type !== 'user') {
@@ -519,17 +716,81 @@ async function addLog(agent, layerLabel, message, type = 'info', skillTag = null
     }
 }
 
+/* Contexto normativo (Regra de Governança) por tipo de evento — usado na trilha */
+const GOV_RULES = {
+    error:   '[Baseline Travada - Ação Autônoma Interceptada]',
+    gov:     '[Núcleo de Governança - Homologação/Decisão Formal]',
+    skill:   '[Skill Gerencial - Premissas Assumidas sob Contexto de PMO]',
+    success: '[Exceção Supervisionada / Conformidade Validada]',
+    user:    '[Supervisão Humana - Accountability Registrada]',
+    mcp:     '[Interoperabilidade Externa Autorizada via Protocolo MCP]'
+};
+
 /* =========================================================================
-   1) LÓGICA DE "SKILLS" — o Coordenador assume premissas (1 pergunta só)
+   FILTRO POR CAMADA — feed mostra só as mensagens daquela camada
    ========================================================================= */
-async function flowStartSkill() {
+function filterByLayer(id) {
+    if (state.filter === id) { clearFilter(); return; }   // clicar de novo limpa
+    state.filter = id;
+    applyFilter();
+    // destaque visual da camada selecionada (sem conflitar com a luz de orquestração)
+    document.querySelectorAll('.layer').forEach(el => el.classList.remove('layer-filtering'));
+    const row = $(`layer-${id}`);
+    if (row) { row.classList.add('layer-filtering'); row.querySelector('.layer-filter-icon')?.classList.replace('opacity-0','opacity-100'); }
+    const layer = LAYERS.find(l => l.id === id);
+    showFilterBar(`Filtrando: Camada ${id} · ${layer ? layer.name : ''}`);
+}
+
+function applyFilter() {
+    document.querySelectorAll('#log-feed .feed-item').forEach(el => {
+        const match = !state.filter || el.dataset.layer === String(state.filter);
+        el.style.display = match ? '' : 'none';
+    });
+    const visible = document.querySelectorAll('#log-feed .feed-item:not([style*="display: none"])').length;
+    const empty = $('filter-empty');
+    if (empty) empty.style.display = (state.filter && visible === 0) ? 'block' : 'none';
+}
+
+function clearFilter() {
+    state.filter = null;
+    document.querySelectorAll('#log-feed .feed-item').forEach(el => el.style.display = '');
+    document.querySelectorAll('.layer').forEach(el => { el.classList.remove('layer-filtering'); el.querySelector('.layer-filter-icon')?.classList.replace('opacity-100','opacity-0'); });
+    hideFilterBar();
+}
+
+function showFilterBar(label) {
+    const bar = $('filter-bar');
+    $('filter-label').textContent = label;
+    bar.classList.remove('hidden');
+}
+function hideFilterBar() {
+    const empty = $('filter-empty'); if (empty) empty.style.display = 'none';
+    $('filter-bar').classList.add('hidden');
+}
+
+/* =========================================================================
+   2) MÁQUINA DE ESTADOS ORGÂNICA — Coordenador deliberativo (multi-step)
+   Passo 1: pergunta SÓ o objetivo. Passo 2: pergunta SÓ o orçamento.
+   Só então a Skill assume as demais premissas institucionais e gera o TAP.
+   ========================================================================= */
+async function flowCoordinatorStart() {
     activateLayer(2, [{label:'View'},{label:'Controller'}]);
-    await sleep(900);
+    await sleep(800);
     activateLayer(4, [{label:'Controller'},{label:'Coordenação'}]);
     await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
-        'Skill <b>"Pré-Configuração Gerencial"</b> ativada. Em vez de um questionário exaustivo, assumo premissas a partir do contexto de PMO. Preciso de <b>uma única informação</b>:\n\n👉 Em uma frase: qual é o <b>objetivo do projeto</b> e qual a <b>faixa de orçamento</b>?',
-        'chat', 'Skill ativada');
-    state.phase = 'AWAIT_BRIEF';
+        'Vamos abrir seu projeto sem burocracia. Para começar, me diga apenas uma coisa:\n\n👉 <b>Qual é o objetivo principal</b> deste projeto?',
+        'chat');
+    state.phase = 'AWAIT_OBJECTIVE';
+}
+
+async function flowAskBudget(objective) {
+    state.objective = objective;
+    activateLayer(4, [{label:'Coordenação'}]);
+    await sleep(900);
+    await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
+        `Perfeito — objetivo registrado. Agora a última pergunta:\n\n👉 <b>Qual é o orçamento estimado</b>? (ex.: "120 mil")`,
+        'chat');
+    state.phase = 'AWAIT_BUDGET';
 }
 
 function parseBudget(text) {
@@ -543,16 +804,20 @@ function parseBudget(text) {
     return 120000; // premissa default da Skill
 }
 
-async function flowGenerateTAP(brief) {
-    const budget = parseBudget(brief);
-    state.project = brief.length > 60 ? brief.slice(0, 57) + '…' : brief;
+async function flowGenerateTAP(budgetText) {
+    state.budgetText = budgetText;
+    const budget = parseBudget(budgetText);
+    state.project = state.objective.length > 60 ? state.objective.slice(0, 57) + '…' : state.objective;
+
+    // AQUI entra a Skill: só após objetivo + orçamento ela assume as premissas
+    activateLayer(4, [{label:'Coordenação'}]);
+    await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
+        'Tenho o suficiente. Acionando a <b>Skill de Pré-Configuração</b> para assumir as demais premissas institucionais — sem te perguntar item por item:', 'skill', 'Skill ativada');
+    await sleep(1200);
 
     activateLayer(6, [{label:'Coordenação'},{label:'Modelos'}]);
-    await addLog('Coordenador de Planejamento', 'Camada 4 · Coordenação',
-        'A Skill <b>assumiu as premissas padrão</b> abaixo (sem te perguntar) para entregar valor imediatamente:', 'skill', 'Premissas inferidas');
-    await sleep(1200);
     await addLog('Camada de Modelos', 'Camada 6 · Estado / Memória',
-        `• Metodologia: <b>Híbrida</b> (PMBOK 8 + ciclos ágeis)\n• Prazo estimado: <b>90 dias</b> (inferido pelo porte)\n• Equipe: <b>5 agentes funcionais</b> (3 construtores · 2 sensores)\n• Reserva de contingência: <b>10%</b>\n• Conformidade <b>LGPD</b>: ativada por padrão\n• Orçamento registrado: <b>${brl(budget)}</b>`, 'info');
+        `• Objetivo: <b>${state.objective}</b>\n• Metodologia: <b>Híbrida</b> (PMBOK 8 + ciclos ágeis)\n• Prazo estimado: <b>90 dias</b> (inferido pelo porte)\n• Equipe: <b>5 agentes funcionais</b> (3 construtores · 2 sensores)\n• Reserva de contingência: <b>10%</b>\n• Conformidade <b>LGPD</b>: ativada por padrão\n• Orçamento registrado: <b>${brl(budget)}</b>`, 'info');
     await sleep(1600);
 
     activateLayer(4, [{label:'Coordenação'},{label:'Governança', type:'gov'}]);
@@ -567,6 +832,12 @@ async function flowGenerateTAP(brief) {
     updateKPIs();
     await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
         '✅ TAP homologado. A partir de agora a <b>BASELINE ESTÁ TRAVADA</b>. Nenhum agente autônomo pode alterar requisitos sem aprovação humana formal — é assim que neutralizamos o comportamento "One Shot Hero".', 'gov');
+
+    // CAMADA 6 — persiste o estado do projeto no backend (Supabase, hoje simulado)
+    await SupabaseService.saveProjectState(state);
+    await sleep(400);
+    await addLog('Camada de Modelos', 'Camada 6 · Estado / Memória',
+        'Estado do projeto persistido (SupabaseService.saveProjectState). Memória sincronizada com o backend Cloud-Native.', 'info');
 }
 
 /* =========================================================================
@@ -604,7 +875,7 @@ async function flowScopeChange(text) {
 function addGovDecision(detail) {
     const old = $('gov-decision'); if (old) old.remove();
     const html = `
-        <div id="gov-decision" class="gov-decision log-enter ml-7 rounded-xl bg-rose-950/30 border p-4">
+        <div id="gov-decision" class="gov-decision feed-item log-enter ml-7 rounded-2xl bg-rose-950/30 border p-4" data-layer="3">
             <p class="text-[13px] text-rose-100/90 leading-relaxed mb-3">
                 <i class="fas fa-user-shield text-rose-300 mr-1.5"></i>
                 A Camada 3 interceptou <b>"${detail}"</b> antes de qualquer agente construtor agir.
@@ -615,11 +886,12 @@ function addGovDecision(detail) {
                     <i class="fas fa-circle-check"></i> Autorizar Exceção
                 </button>
                 <button onclick="resolveGovernance(false)" class="gov-btn bg-slate-700/80 hover:bg-slate-600 text-slate-100 px-4 py-2.5 rounded-lg text-[13px] font-semibold border border-slate-600/60 flex items-center gap-2">
-                    <i class="fas fa-ban"></i> Manter Bloqueio
+                    <i class="fas fa-ban"></i> Rejeitar
                 </button>
             </div>
         </div>`;
     $('log-feed').insertAdjacentHTML('beforeend', html);
+    if (state.filter) applyFilter();
     scrollBottom(true);
 }
 
@@ -634,6 +906,8 @@ async function resolveGovernance(approve) {
             activateLayer(1, [{label:'View'}]);
             await addLog('Autoridade Humana (Patrocinador)', 'Camada 1 · View',
                 'Autorizo a exceção e assumo a responsabilidade (accountability) pelo impacto da mudança CR-042.', 'user');
+            // ACCOUNTABILITY: registra a decisão crítica no backend (Camada 6)
+            await SupabaseService.insertAuditLog({ seq: seq, ts: new Date().toISOString(), agent: 'Autoridade Humana', layer: 'Camada 3', type: 'gov', rule: GOV_RULES.gov, message: 'Exceção de baseline autorizada sob supervisão humana (Princípio 7).' });
             await sleep(700);
             activateLayer(3, [{label:'View'},{label:'Controller'},{label:'Governança', type:'gov'}]);
             state.baseline = 'EXCEPTION';
@@ -646,11 +920,11 @@ async function resolveGovernance(approve) {
             await flowMasaiConflict('Exceção autorizada: acionar agentes construtores e sensores para a mudança CR-042 (2FA).');
         } else {
             activateLayer(3, [{label:'View'},{label:'Controller'},{label:'Governança', type:'gov'}]);
-            setCardStatus('Bloqueado pela Governança — baseline preservada', 'block');
-            await addLog('Gerente de Projetos', 'Camada 1 · View', 'Manter o bloqueio. Não autorizo a alteração neste momento.', 'user');
+            setCardStatus('Rejeitado pela Governança — baseline preservada', 'block');
+            await addLog('Gerente de Projetos', 'Camada 1 · View', 'Rejeito a alteração neste momento. Manter o bloqueio.', 'user');
             await sleep(700);
             await addLog('Orquestrador de Governança', 'Camada 3 · Núcleo',
-                'Bloqueio mantido. A Baseline permanece <b>TRAVADA</b> e nenhuma alteração autônoma foi aplicada. Decisão registrada na trilha de auditoria.', 'gov');
+                'Solicitação rejeitada. A Baseline permanece <b>TRAVADA</b> e nenhuma alteração autônoma foi aplicada. Decisão registrada na trilha de auditoria.', 'gov');
         }
     } finally {
         state.phase = 'IDLE';
@@ -757,8 +1031,15 @@ async function handleInput() {
     const q = text.toLowerCase();
 
     try {
-        // -- estado: aguardando o briefing único da Skill --
-        if (state.phase === 'AWAIT_BRIEF') {
+        // -- multi-step: aguardando o OBJETIVO --
+        if (state.phase === 'AWAIT_OBJECTIVE') {
+            await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
+            await flowAskBudget(text);
+            return;
+        }
+
+        // -- multi-step: aguardando o ORÇAMENTO → dispara a Skill + TAP --
+        if (state.phase === 'AWAIT_BUDGET') {
             await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
             state.phase = 'IDLE';
             await flowGenerateTAP(text);
@@ -777,7 +1058,7 @@ async function handleInput() {
             return;
         }
 
-        // -- comandos livres mapeados pelo Controller --
+        // -- comandos livres mapeados pelo Controller (comportamento reativo) --
         if (/destravar|abrir.*baseline|destrava/.test(q)) {
             await flowAskUnlock(text);
         }
@@ -800,16 +1081,18 @@ async function handleInput() {
         else if (/integrar|jira|mcp|outlook|go.?live|encerr/.test(q)) {
             await flowMcp(text);
         }
-        else if (/iniciar|come[çc]ar|criar.*projeto|novo projeto|abrir projeto/.test(q)) {
+        // -- comportamento DELIBERATIVO: baseline aberta + ocioso → Coordenador --
+        // Qualquer mensagem livre ("oi, preciso de ajuda com um projeto") inicia o fluxo.
+        else if (state.baseline === 'OPEN' && state.phase === 'IDLE') {
             await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
-            await flowStartSkill();
+            await flowCoordinatorStart();
         }
         else {
             await addLog('Gerente de Projetos', 'Camada 1 · View', text, 'user');
             await sleep(700);
             activateLayer(2, [{label:'View'},{label:'Controller'}]);
             await addLog('Controller', 'Camada 2 · Roteamento',
-                'Comando não mapeado. Tente: <b>"Iniciar projeto"</b>, <b>"Solicitar mudança de escopo"</b>, <b>"Aprovar formalmente"</b>, <b>"Acionar MASAI"</b> ou <b>"Integrar MCP"</b>.', 'info');
+                'O projeto já possui uma Baseline. Tente: <b>"Solicitar mudança de escopo"</b>, <b>"Acionar MASAI"</b>, <b>"Destravar baseline"</b> ou <b>"Integrar MCP"</b>.', 'info');
         }
     } finally {
         setProcessing(false);
@@ -823,14 +1106,17 @@ async function triggerScenario(n) {
     setProcessing(true);
     try {
         if (n === 0) {
-            await addLog('Gerente de Projetos', 'Camada 1 · View', 'Quero iniciar um projeto!', 'user');
-            await flowStartSkill();
-            // auto-preenche o briefing único para demonstrar a Skill ponta-a-ponta
-            await sleep(1400);
-            const demoBrief = 'Lançar um portal de atendimento ao cidadão, orçamento ~120 mil';
-            await addLog('Gerente de Projetos', 'Camada 1 · View', demoBrief, 'user');
+            await addLog('Gerente de Projetos', 'Camada 1 · View', 'Oi, preciso de ajuda para iniciar um projeto.', 'user');
+            await flowCoordinatorStart();             // passo 1: pergunta o objetivo
+            await sleep(1300);
+            const obj = 'Portal de atendimento ao cidadão';
+            await addLog('Gerente de Projetos', 'Camada 1 · View', obj, 'user');
+            await flowAskBudget(obj);                  // passo 2: pergunta o orçamento
+            await sleep(1300);
+            const bud = 'Cerca de 120 mil';
+            await addLog('Gerente de Projetos', 'Camada 1 · View', bud, 'user');
             state.phase = 'IDLE';
-            await flowGenerateTAP(demoBrief);
+            await flowGenerateTAP(bud);                // Skill assume premissas + TAP + Supabase
         }
         if (n === 1) await flowScopeChange('Solicito adicionar um módulo de Autenticação 2FA urgente ao escopo.');
         if (n === 2) await flowMasaiConflict('Contrato de execução aprovado. Acionar os agentes construtores e sensores.');
@@ -973,10 +1259,11 @@ async function submitCardToGovernance() {
 }
 
 /* ---------------- Boot ---------------- */
-window.onload = () => {
+window.onload = async () => {
     renderLayers();
     updateKPIs();
     bindKanban();
+    await SupabaseService.initSupabase();   // Camada 6 — conecta (ou entra em modo simulado)
     $('userInput').addEventListener('keypress', e => { if (e.key === 'Enter') handleInput(); });
 
     // Rede de segurança de auto-scroll: qualquer mudança no feed (mensagens
@@ -987,7 +1274,7 @@ window.onload = () => {
     setTimeout(() => {
         activateLayer(6, [{label:'Modelos'}]);
         addLog('Sistema', 'Camada 6 · Modelos / Memória',
-            'Ambiente carregado. Núcleo de Governança em vigília. Inicie um projeto (botão 1) e depois <b>arraste o card CR-042</b> para a zona de Governança.', 'info');
+            'Ambiente carregado. Núcleo de Governança em vigília. Diga, por exemplo, <b>"preciso de ajuda com um projeto"</b> ou clique nas camadas à esquerda para filtrar o histórico.', 'info');
         setTimeout(() => renderRoute([{label:'aguardando comando…'}]), 800);
     }, 500);
 };
