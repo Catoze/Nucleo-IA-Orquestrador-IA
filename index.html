@@ -45,6 +45,9 @@
         };
     </script>
 
+    <!-- CDN do Supabase (cliente JS v2) — necessário para window.supabase.createClient -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -237,6 +240,10 @@
         <div class="px-3 flex-1 overflow-y-auto space-y-0.5" id="layers-container"></div>
 
         <div class="p-4 border-t border-slate-800/80 space-y-2">
+            <div id="supabase-status" class="flex items-start gap-2 text-[10px] rounded-lg border px-2.5 py-2 border-slate-700/60 bg-slate-800/40 text-slate-400">
+                <i class="fas fa-circle-notch fa-spin mt-0.5 text-slate-500"></i>
+                <span id="supabase-status-text" class="leading-snug">Supabase: verificando…</span>
+            </div>
             <div class="flex items-center justify-between text-[10px] text-slate-500 px-1">
                 <span class="uppercase tracking-wider font-bold">Eventos em trilha</span>
                 <span id="event-count" class="mono text-slate-300">0</span>
@@ -352,75 +359,6 @@
         </div>
 
     </main>
-/* =========================================================================
-   MÓDULO SUPABASE (Camada 6 - Modelos / Cloud-Native)
-   Integração para persistência de estado e trilha de auditoria.
-========================================================================= */
-
-const SUPABASE_URL = 'https://mjqzptdqubprgngcjgch.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_a1Iw2tyKYP1RzmnsO1UNRg_9ROrdAev';
-
-const SupabaseService = {
-    client: null,
-
-    async initSupabase() {
-        try {
-            // Verifica se o CDN do Supabase foi carregado no HTML
-            if (window.supabase) {
-                this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                console.log('[SupabaseService] Conectado à nuvem do Supabase com sucesso.');
-            } else {
-                console.warn('[SupabaseService] CDN do Supabase não encontrado. Rodando offline.');
-            }
-        } catch (error) {
-            console.error('[SupabaseService] Erro na inicialização:', error);
-        }
-    },
-
-    async saveProjectState(state) {
-        try {
-            console.log('[SupabaseService] Tentando salvar estado:', state);
-            if (this.client) {
-                // Chamada real para o banco de dados (Ativada)
-                const { data, error } = await this.client
-                    .from('project_state')
-                    .upsert([{ 
-                        id: 1, 
-                        baseline: state.baseline, 
-                        cost: state.cost, 
-                        risk: state.risk, 
-                        phase: state.phase 
-                    }]);
-                
-                if (error) throw error;
-                console.log('[SupabaseService] Estado do projeto salvo na nuvem com sucesso.');
-            }
-        } catch (error) {
-            console.error('[SupabaseService] Erro ao salvar estado:', error);
-        }
-    },
-
-    async insertAuditLog(logEntry) {
-        try {
-            console.log('[SupabaseService] Tentando gravar log de auditoria:', logEntry);
-            if (this.client) {
-                // Chamada real para o banco de dados (Ativada)
-                const { data, error } = await this.client
-                    .from('audit_log')
-                    .insert([logEntry]);
-                
-                if (error) throw error;
-                console.log('[SupabaseService] Log persistido na nuvem com sucesso.');
-            }
-        } catch (error) {
-            console.error('[SupabaseService] Erro ao registrar log:', error);
-        }
-    }
-};
-
-// Inicia a conexão automaticamente ao abrir o site
-SupabaseService.initSupabase();
-
 
 <script>
 /* =========================================================================
@@ -434,10 +372,8 @@ SupabaseService.initSupabase();
    │  Arquitetura Cloud-Native · Armazenamento de Estado via Supabase        │
    ├───────────────────────────────────────────────────────────────────────┤
    │                                                                         │
-   │  1) Adicione o CDN do Supabase no <head> do index.html (antes deste       │
-   │     script). Use a tag:                                                  │
-   │       script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"  │
-   │     (abra com < e feche normalmente a tag script).                       │
+   │  1) CDN do Supabase: JÁ INCLUÍDO no <head> deste arquivo.                 │
+   │     (tag script com src .../@supabase/supabase-js@2)                      │
    │                                                                         │
    │  2) Preencha as credenciais do projeto abaixo (NUNCA comite a service_   │
    │     role key; em produção use variáveis de ambiente / Vercel Env Vars): │
@@ -454,15 +390,17 @@ SupabaseService.initSupabase();
    │     fluxo — basta plugar o backend. Não é preciso alterar a UI.          │
    └───────────────────────────────────────────────────────────────────────┘ */
 
-// >>> CONFIGURAÇÃO DO BACKEND (preencher após criar o projeto no Supabase) <<<
-const SUPABASE_URL      = "";   // ex.: "https://xxxx.supabase.co"
-const SUPABASE_ANON_KEY = "";   // ex.: "eyJhbGciOi..."
+// >>> CONFIGURAÇÃO DO BACKEND ------------------------------------------------
+// A "anon/publishable key" foi feita para ser pública (roda no navegador). A
+// segurança real vem das POLÍTICAS RLS no Supabase — NUNCA use a service_role aqui.
+const SUPABASE_URL      = "https://mjqzptdqubprgngcjgch.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_a1Iw2tyKYP1RzmnsO1UNRg_9ROrdAev";
 
 /* =========================================================================
    CAMADA 6 (MODELOS) — SupabaseService
-   Serviço de persistência de Estado e Memória do projeto. Hoje opera em modo
-   SIMULADO (console.log). Quando as credenciais e o CDN estiverem presentes,
-   ele passa a persistir de verdade — sem mudar nenhuma chamada na View.
+   Persistência de Estado e Memória. Conecta de verdade quando o CDN do
+   Supabase + as credenciais estão presentes; caso contrário, cai em modo
+   SIMULADO (console.log) sem quebrar a View.
    ========================================================================= */
 const SupabaseService = {
     client: null,
@@ -470,60 +408,113 @@ const SupabaseService = {
 
     async initSupabase() {
         try {
-            // Só conecta de verdade se o CDN estiver carregado e as credenciais preenchidas
-            if (typeof window !== 'undefined' && window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
-                this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                this.connected = true;
-                console.log('[SupabaseService] Conectado ao backend Supabase (Camada 6).');
-            } else {
+            if (!window.supabase) {
                 this.connected = false;
-                console.log('[SupabaseService] Modo SIMULADO — sem credenciais/CDN. Persistência apenas logada no console.');
+                setSupabaseStatus('off', 'Supabase: CDN não carregado (modo simulado).');
+                console.warn('[SupabaseService] CDN do Supabase não carregado — modo SIMULADO.');
+                return false;
+            }
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+                this.connected = false;
+                setSupabaseStatus('off', 'Supabase: credenciais ausentes (modo simulado).');
+                return false;
+            }
+            this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            this.connected = true;
+            console.log('[SupabaseService] Cliente criado. Testando conexão…');
+
+            // AUTOTESTE: faz um SELECT leve para revelar na tela o erro real
+            // (tabela inexistente, RLS bloqueando, chave inválida, etc.)
+            const { error } = await this.client.from('audit_log').select('id').limit(1);
+            if (error) {
+                setSupabaseStatus('err', 'Supabase conectado, mas a tabela falhou: ' + (error.message || error.code || 'erro desconhecido'));
+                console.error('[SupabaseService] Autoteste falhou:', error);
+            } else {
+                setSupabaseStatus('ok', 'Supabase: conectado e tabelas OK ✓');
+                console.log('[SupabaseService] Conexão e tabela audit_log OK.');
             }
             return this.connected;
         } catch (err) {
             this.connected = false;
+            setSupabaseStatus('err', 'Supabase: falha ao inicializar — ' + (err.message || err));
             console.error('[SupabaseService] Falha ao inicializar:', err);
             return false;
         }
     },
 
     async saveProjectState(projectState) {
+        // Mapeamento explícito p/ as colunas da tabela project_state
         const payload = {
+            id: 1, // linha única do projeto atual (upsert por id)
             project: projectState.project,
             baseline: projectState.baseline,
             cost: projectState.cost,
             risk: projectState.risk,
+            phase: projectState.phase,
             updated_at: new Date().toISOString()
         };
         try {
             if (this.connected && this.client) {
-                // PRODUÇÃO: await this.client.from('project_state').upsert(payload);
-                console.log('[SupabaseService] upsert project_state →', payload);
+                const { error } = await this.client
+                    .from('project_state')
+                    .upsert(payload, { onConflict: 'id' });
+                if (error) throw error;
+                console.log('[SupabaseService] project_state salvo na nuvem ✓', payload);
             } else {
                 console.log('[SupabaseService][SIMULADO] saveProjectState →', payload);
             }
             return { ok: true, payload };
         } catch (err) {
-            console.error('[SupabaseService] Erro em saveProjectState:', err);
+            console.error('[SupabaseService] Erro em saveProjectState:', err.message || err, err);
+            setSupabaseStatus('err', 'Erro ao salvar estado: ' + (err.message || err));
             return { ok: false, error: err };
         }
     },
 
     async insertAuditLog(logEntry) {
+        // Mapeamento explícito p/ as colunas da tabela audit_log.
+        // ts é sempre um timestamp ISO válido (o campo "time" da UI é só exibição).
+        const row = {
+            seq: logEntry.seq,
+            ts: logEntry.ts || new Date().toISOString(),
+            agent: logEntry.agent,
+            layer: logEntry.layer,
+            type: logEntry.type,
+            rule: logEntry.rule || '',
+            message: logEntry.message
+        };
         try {
             if (this.connected && this.client) {
-                // PRODUÇÃO: await this.client.from('audit_log').insert(logEntry);
-                console.log('[SupabaseService] insert audit_log →', logEntry);
+                const { error } = await this.client.from('audit_log').insert(row);
+                if (error) throw error;
+                console.log('[SupabaseService] audit_log gravado na nuvem ✓ (#' + row.seq + ')');
             } else {
-                console.log('[SupabaseService][SIMULADO] insertAuditLog →', logEntry);
+                console.log('[SupabaseService][SIMULADO] insertAuditLog →', row);
             }
-            return { ok: true, logEntry };
+            return { ok: true, row };
         } catch (err) {
-            console.error('[SupabaseService] Erro em insertAuditLog:', err);
+            console.error('[SupabaseService] Erro em insertAuditLog:', err.message || err, err);
+            setSupabaseStatus('err', 'Erro ao gravar log: ' + (err.message || err));
             return { ok: false, error: err };
         }
     }
 };
+
+/* Indicador visual do estado do Supabase na sidebar (off | ok | err) */
+function setSupabaseStatus(kind, text) {
+    const box = document.getElementById('supabase-status');
+    const label = document.getElementById('supabase-status-text');
+    if (!box || !label) return;
+    const map = {
+        ok:  ['border-emerald-500/40 bg-emerald-900/20 text-emerald-200', 'fa-circle-check text-emerald-400'],
+        err: ['border-rose-500/50 bg-rose-900/25 text-rose-200',          'fa-triangle-exclamation text-rose-400'],
+        off: ['border-slate-700/60 bg-slate-800/40 text-slate-400',       'fa-plug-circle-xmark text-slate-500']
+    };
+    const [cls, icon] = map[kind] || map.off;
+    box.className = 'flex items-start gap-2 text-[10px] rounded-lg border px-2.5 py-2 ' + cls;
+    box.querySelector('i').className = 'fas ' + icon + ' mt-0.5';
+    label.textContent = text;
+}
 
 const LAYERS = [
     { id: 1, name: 'Apresentação (View)',        icon: 'fa-display',    desc: 'Interface com o humano. Captura comandos e renderiza a trilha — não toma decisões de negócio.' },
